@@ -102,23 +102,36 @@ function cleanStr(v) {
   return s === "" || s === "-" ? null : s;
 }
 
-// Accepts JS Date, Excel serial number, or dd-mm-yyyy / dd/mm/yyyy / yyyy-mm-dd strings
+// Validate y/m/d parts; returns "yyyy-mm-dd" or undefined if not a real date
+function ymd(y, mo, d) {
+  y = Number(y); mo = Number(mo); d = Number(d);
+  if (y < 1990 || y > 2100 || mo < 1 || mo > 12 || d < 1 || d > 31) return undefined;
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return undefined; // e.g. 31 Feb
+  return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+// Accepts JS Date, Excel serial number, or dd-mm-yyyy / mm/dd/yyyy / yyyy-mm-dd strings.
+// Returns "yyyy-mm-dd", null (blank), or undefined (unreadable → warning, stored as null).
 function parseDate(v) {
   if (v == null || v === "" || v === "-") return null;
-  if (v instanceof Date && !isNaN(v)) {
-    return v.getFullYear() + "-" + String(v.getMonth() + 1).padStart(2, "0") + "-" + String(v.getDate()).padStart(2, "0");
-  }
-  if (typeof v === "number" && v > 20000 && v < 60000) { // Excel serial
-    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
-    return d.toISOString().slice(0, 10);
+  if (v instanceof Date && !isNaN(v)) return ymd(v.getFullYear(), v.getMonth() + 1, v.getDate());
+  if (typeof v === "number") {
+    if (v < 20000 || v > 60000) return undefined;                    // junk serial (e.g. 0 → "00-01-1900")
+    return new Date(Math.round((v - 25569) * 86400 * 1000)).toISOString().slice(0, 10);
   }
   const s = String(v).trim();
-  let m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);          // dd-mm-yyyy
-  if (m) return `${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
-  m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);              // yyyy-mm-dd
-  if (m) return `${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
+  let m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);           // dd-mm-yyyy (Indian default)
+  if (m) {
+    let r = ymd(m[3], m[2], m[1]);
+    if (r === undefined && Number(m[1]) <= 12) r = ymd(m[3], m[1], m[2]); // fall back to US mm/dd/yyyy
+    return r;
+  }
+  m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);               // yyyy-mm-dd
+  if (m) return ymd(m[1], m[2], m[3]);
   const d = new Date(s);
-  return isNaN(d) ? undefined : d.toISOString().slice(0, 10);       // undefined = unparseable
+  if (isNaN(d)) return undefined;
+  return ymd(d.getFullYear(), d.getMonth() + 1, d.getDate());
 }
 
 function parseNum(v) {
