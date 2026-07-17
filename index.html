@@ -40,15 +40,17 @@
     </div>
   </header>
 
-  <nav class="tabs" id="tabs">
-    <button class="tab active" data-tab="overview">Overview</button>
-    <button class="tab" data-tab="regional">Regional</button>
-    <button class="tab" data-tab="stores">Stores &amp; Cities</button>
-    <button class="tab" data-tab="issues">Issues &amp; Bottlenecks</button>
-    <button class="tab" data-tab="ageing">Ageing &amp; TAT</button>
-    <button class="tab" data-tab="explorer">Data Explorer</button>
+  <div class="layout">
+  <nav class="sidebar" id="tabs">
+    <button class="tab active" data-tab="overview">📊 Overview</button>
+    <button class="tab" data-tab="regional">🗺 Regional</button>
+    <button class="tab" data-tab="stores">🏬 Stores &amp; Cities</button>
+    <button class="tab" data-tab="issues">🛠 Issues &amp; Bottlenecks</button>
+    <button class="tab" data-tab="ageing">⏱ Ageing &amp; TAT</button>
+    <button class="tab" data-tab="explorer">🔍 Data Explorer</button>
     <button class="tab tab-upload hidden" data-tab="upload" id="upload-tab-btn">⬆ Upload Data</button>
   </nav>
+  <div class="content">
 
   <!-- ============ GLOBAL FILTER BAR ============ -->
   <div class="filterbar" id="filterbar">
@@ -61,6 +63,7 @@
     <div class="filter-group"><label>Stage</label><select id="f-status"></select></div>
     <div class="filter-group"><label>Open/Closed</label><select id="f-final"></select></div>
     <div class="filter-group"><label>Responsibility</label><select id="f-resp"></select></div>
+    <div class="filter-group"><label>Logo/Non-Logo</label><select id="f-logo"></select></div>
     <div class="filter-group grow"><label>Search</label><input type="text" id="f-search" placeholder="store / city / ticket id…"></div>
     <div class="filter-actions">
       <button class="btn btn-ghost" id="preset-save" title="Save current filters as preset">★ Save</button>
@@ -127,6 +130,10 @@
 
     <!-- ============ ISSUES & BOTTLENECKS ============ -->
     <section class="view hidden" id="view-issues">
+      <div class="card">
+        <div class="card-head"><h3>Budget Category — Received vs Closed vs Open (click to drill)</h3><button class="btn-mini export-agg" data-agg="budgetStatus">⬇ CSV</button></div>
+        <canvas id="ch-budget-status"></canvas>
+      </div>
       <div class="grid-2">
         <div class="card"><div class="card-head"><h3>Top Issue Categories (click to drill)</h3></div><canvas id="ch-issuecat"></canvas></div>
         <div class="card"><div class="card-head"><h3>Open Tickets by Issue Category — bottlenecks</h3></div><canvas id="ch-opencat"></canvas></div>
@@ -222,6 +229,8 @@
   </aside>
 
   <div id="loading" class="loading hidden"><div class="spinner"></div><div id="loading-msg">Loading data…</div></div>
+  </div><!-- /content -->
+  </div><!-- /layout -->
 </div>
 
 <script src="js/config.js"></script>
