@@ -257,17 +257,34 @@ function cssVar(n) { return getComputedStyle(document.documentElement).getProper
 
 function makeChart(id, cfg, onLabelClick) {
   if (S.charts[id]) S.charts[id].destroy();
+  if (typeof ChartDataLabels !== "undefined" && !S._dlReg) { Chart.register(ChartDataLabels); S._dlReg = true; }
   const base = {
     responsive: true, maintainAspectRatio: true,
     plugins: { legend: { labels: { color: cssVar("--text") } } },
   };
   cfg.options = deepMerge(base, cfg.options || {});
-  if (cfg.type !== "doughnut" && cfg.type !== "pie") {
+  const isPie = cfg.type === "doughnut" || cfg.type === "pie";
+  const horizontal = cfg.options.indexAxis === "y";
+  const stacked = !!(cfg.options.scales && ((cfg.options.scales.x || {}).stacked || (cfg.options.scales.y || {}).stacked));
+  if (!isPie) {
     cfg.options.scales = deepMerge({
       x: { ticks: { color: cssVar("--muted") }, grid: { color: cssVar("--border") } },
       y: { ticks: { color: cssVar("--muted") }, grid: { color: cssVar("--border") } },
     }, cfg.options.scales || {});
+    // headroom so value labels above bars/points don't get clipped
+    cfg.options.scales[horizontal ? "x" : "y"].grace = stacked ? undefined : "10%";
   }
+  // show numbers on bars / points / slices (skipped gracefully if plugin CDN failed)
+  cfg.options.plugins.datalabels = deepMerge({
+    display: c => { const v = c.dataset.data[c.dataIndex]; return v != null && v !== 0; },
+    color: isPie ? "#fff" : cssVar("--text"),
+    font: { size: 10.5, weight: "600" },
+    formatter: v => typeof v === "number" ? (Number.isInteger(v) ? v.toLocaleString("en-IN") : v.toFixed(1)) : v,
+    anchor: (isPie || stacked) ? "center" : "end",
+    align: (isPie || stacked) ? "center" : "end",
+    offset: (isPie || stacked) ? 0 : 2,
+    clamp: true, clip: false,
+  }, cfg.options.plugins.datalabels || {});
   if (onLabelClick) {
     cfg.options.onClick = (evt, els, chart) => {
       const pts = chart.getElementsAtEventForMode(evt, "nearest", { intersect: true }, true);
