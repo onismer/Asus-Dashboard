@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASUS Store Maintenance Dashboard</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="login-screen" class="login-screen hidden">
+  <form id="login-form" class="login-card">
+    <div class="login-logo">ASUS</div>
+    <h1>Store Maintenance Dashboard</h1>
+    <p class="muted">Sign in to continue</p>
+    <input type="email" id="login-email" placeholder="Email" required autocomplete="username">
+    <input type="password" id="login-password" placeholder="Password" required autocomplete="current-password">
+    <button type="submit" class="btn btn-primary" id="login-btn">Sign in</button>
+    <div id="login-error" class="login-error"></div>
+  </form>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app" class="hidden">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-logo">ASUS</span>
+      <span class="brand-title">Store Maintenance Dashboard</span>
+      <span id="as-on-badge" class="badge" title="Date of latest uploaded report"></span>
+    </div>
+    <div class="topbar-right">
+      <button class="btn btn-ghost" id="theme-toggle" title="Toggle dark mode">◐</button>
+      <span id="user-email" class="muted"></span>
+      <button class="btn btn-ghost" id="signout-btn">Sign out</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="overview">Overview</button>
+    <button class="tab" data-tab="regional">Regional</button>
+    <button class="tab" data-tab="stores">Stores &amp; Cities</button>
+    <button class="tab" data-tab="issues">Issues &amp; Bottlenecks</button>
+    <button class="tab" data-tab="ageing">Ageing &amp; TAT</button>
+    <button class="tab" data-tab="explorer">Data Explorer</button>
+    <button class="tab tab-upload hidden" data-tab="upload" id="upload-tab-btn">⬆ Upload Data</button>
+  </nav>
+
+  <!-- ============ GLOBAL FILTER BAR ============ -->
+  <div class="filterbar" id="filterbar">
+    <div class="filter-group"><label>Year</label><select id="f-year"></select></div>
+    <div class="filter-group"><label>Quarter</label><select id="f-quarter"></select></div>
+    <div class="filter-group"><label>Region</label><select id="f-region"></select></div>
+    <div class="filter-group"><label>Branch</label><select id="f-branch"></select></div>
+    <div class="filter-group"><label>City Tier</label><select id="f-tier"></select></div>
+    <div class="filter-group"><label>Budget Cat.</label><select id="f-budget"></select></div>
+    <div class="filter-group"><label>Stage</label><select id="f-status"></select></div>
+    <div class="filter-group"><label>Open/Closed</label><select id="f-final"></select></div>
+    <div class="filter-group"><label>Responsibility</label><select id="f-resp"></select></div>
+    <div class="filter-group grow"><label>Search</label><input type="text" id="f-search" placeholder="store / city / ticket id…"></div>
+    <div class="filter-actions">
+      <button class="btn btn-ghost" id="preset-save" title="Save current filters as preset">★ Save</button>
+      <select id="preset-list" title="Saved filter presets"><option value="">Presets…</option></select>
+      <button class="btn btn-ghost" id="filters-clear">✕ Clear</button>
+    </div>
+  </div>
+  <div id="active-filters" class="active-filters"></div>
+
+  <main id="main">
+    <!-- ============ OVERVIEW ============ -->
+    <section class="view" id="view-overview">
+      <div class="kpi-grid" id="kpi-grid"></div>
+      <div class="grid-2">
+        <div class="card"><div class="card-head"><h3>Quarterly — Received vs Closed vs Open</h3><button class="btn-mini export-agg" data-agg="quarterly">⬇ CSV</button></div><canvas id="ch-quarterly"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Ticket Stage Funnel (click to drill)</h3><button class="btn-mini export-agg" data-agg="stages">⬇ CSV</button></div><canvas id="ch-stages"></canvas></div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><div class="card-head"><h3>Budget Category Split</h3><button class="btn-mini export-agg" data-agg="budget">⬇ CSV</button></div><canvas id="ch-budget"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Monthly Trend — Raised vs Rectified</h3><button class="btn-mini export-agg" data-agg="monthly">⬇ CSV</button></div><canvas id="ch-monthly"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Quarterly Performance (CP vs ASUS/RV)</h3><button class="btn-mini export-agg" data-agg="quarterlyDetail">⬇ CSV</button></div>
+        <div class="table-wrap"><table id="tbl-quarterly" class="data-table clickable"></table></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Half-Yearly Trend</h3><button class="btn-mini export-agg" data-agg="halfyear">⬇ CSV</button></div>
+        <div class="table-wrap"><table id="tbl-halfyear" class="data-table clickable"></table></div>
+      </div>
+    </section>
+
+    <!-- ============ REGIONAL ============ -->
+    <section class="view hidden" id="view-regional">
+      <div class="grid-2">
+        <div class="card"><div class="card-head"><h3>Tickets by Region (click bar to drill)</h3></div><canvas id="ch-region"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Avg Resolution TAT by Region (days)</h3></div><canvas id="ch-region-tat"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Region Summary (click row to drill)</h3><button class="btn-mini export-agg" data-agg="region">⬇ CSV</button></div>
+        <div class="table-wrap"><table id="tbl-region" class="data-table clickable"></table></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Branch / State Summary (click row to drill)</h3><button class="btn-mini export-agg" data-agg="branch">⬇ CSV</button></div>
+        <div class="table-wrap"><table id="tbl-branch" class="data-table clickable"></table></div>
+      </div>
+    </section>
+
+    <!-- ============ STORES & CITIES ============ -->
+    <section class="view hidden" id="view-stores">
+      <div class="kpi-grid" id="store-kpis"></div>
+      <div class="grid-2">
+        <div class="card"><div class="card-head"><h3>Top 15 Stores by Tickets (click to drill)</h3></div><canvas id="ch-topstores"></canvas></div>
+        <div class="card"><div class="card-head"><h3>City Tier Split</h3></div><canvas id="ch-tier"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Store-wise View <input id="store-search" class="inline-search" placeholder="search store…"></h3><button class="btn-mini export-agg" data-agg="store">⬇ CSV</button></div>
+        <div class="table-wrap tall"><table id="tbl-store" class="data-table clickable"></table></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>City-wise View <input id="city-search" class="inline-search" placeholder="search city…"></h3><button class="btn-mini export-agg" data-agg="city">⬇ CSV</button></div>
+        <div class="table-wrap tall"><table id="tbl-city" class="data-table clickable"></table></div>
+      </div>
+    </section>
+
+    <!-- ============ ISSUES & BOTTLENECKS ============ -->
+    <section class="view hidden" id="view-issues">
+      <div class="grid-2">
+        <div class="card"><div class="card-head"><h3>Top Issue Categories (click to drill)</h3></div><canvas id="ch-issuecat"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Open Tickets by Issue Category — bottlenecks</h3></div><canvas id="ch-opencat"></canvas></div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><div class="card-head"><h3>Avg Resolution Days by Issue Category (slowest first)</h3></div><canvas id="ch-cat-tat"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Open Tickets Stuck by Stage &amp; Ageing</h3><button class="btn-mini export-agg" data-agg="stuck">⬇ CSV</button></div>
+          <div class="table-wrap"><table id="tbl-stuck" class="data-table clickable"></table></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Issue Category Detail (click row to drill)</h3><button class="btn-mini export-agg" data-agg="issuecat">⬇ CSV</button></div>
+        <div class="table-wrap tall"><table id="tbl-issuecat" class="data-table clickable"></table></div>
+      </div>
+    </section>
+
+    <!-- ============ AGEING & TAT ============ -->
+    <section class="view hidden" id="view-ageing">
+      <div class="grid-2">
+        <div class="card"><div class="card-head"><h3>Open Ticket Ageing (as on latest data, click to drill)</h3></div><canvas id="ch-open-ageing"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Closure Ageing — CP vs ASUS/RV</h3></div><canvas id="ch-close-ageing"></canvas></div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><div class="card-head"><h3>TAT Compliance by Quarter (closed tickets)</h3></div><canvas id="ch-tat-comp"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Avg TAT Trend by Quarter (days)</h3></div><canvas id="ch-tat-trend"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Open Ticket Ageing Detail (click row to drill)</h3><button class="btn-mini export-agg" data-agg="openAgeing">⬇ CSV</button></div>
+        <div class="table-wrap"><table id="tbl-open-ageing" class="data-table clickable"></table></div>
+      </div>
+    </section>
+
+    <!-- ============ DATA EXPLORER ============ -->
+    <section class="view hidden" id="view-explorer">
+      <div class="card">
+        <div class="card-head">
+          <h3>Raw Ticket Data <span id="explorer-count" class="badge"></span></h3>
+          <div class="head-actions">
+            <button class="btn btn-primary" id="export-xlsx">⬇ Export Excel (filtered)</button>
+            <button class="btn" id="export-csv">⬇ Export CSV (filtered)</button>
+          </div>
+        </div>
+        <div class="table-wrap tall"><table id="tbl-explorer" class="data-table clickable"></table></div>
+        <div class="pager">
+          <button class="btn btn-ghost" id="pg-prev">‹ Prev</button>
+          <span id="pg-info"></span>
+          <button class="btn btn-ghost" id="pg-next">Next ›</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ UPLOAD ============ -->
+    <section class="view hidden" id="view-upload">
+      <div class="card">
+        <div class="card-head"><h3>Upload Daily Report</h3></div>
+        <p class="muted">Upload the full cumulative Excel (same format as the “Details Sheet”). The parser validates the file and shows what will change <b>before</b> anything is written to the database. If a “Total Store Covered” sheet is present, the store master is refreshed from it too.</p>
+        <div id="dropzone" class="dropzone">
+          <input type="file" id="file-input" accept=".xlsx,.xls" hidden>
+          <div class="dz-inner">📄 Drag &amp; drop the Excel file here<br><span class="muted">or</span><br><button class="btn btn-primary" id="browse-btn" type="button">Browse file</button></div>
+        </div>
+        <div id="parse-progress" class="hidden"><div class="progress"><div class="progress-fill" id="parse-bar"></div></div><div id="parse-msg" class="muted"></div></div>
+      </div>
+
+      <div class="card hidden" id="validation-card">
+        <div class="card-head"><h3>Validation Report — <span id="val-filename"></span></h3></div>
+        <div id="val-summary" class="val-summary"></div>
+        <details id="val-errors-box" class="hidden"><summary class="err">❌ Errors (rows skipped — fix &amp; re-upload to include them)</summary><ul id="val-errors"></ul></details>
+        <details id="val-warnings-box" class="hidden"><summary class="warn">⚠ Warnings (rows still uploaded)</summary><ul id="val-warnings"></ul></details>
+        <details><summary>Preview — first 15 parsed rows</summary><div class="table-wrap"><table id="tbl-preview" class="data-table"></table></div></details>
+        <div class="commit-row">
+          <label class="chk"><input type="checkbox" id="opt-delete-missing"> Also delete <span id="del-count">0</span> ticket(s) in the database that are missing from this file</label>
+          <label class="chk"><input type="checkbox" id="opt-backup" checked> Back up original file to Supabase Storage</label>
+          <button class="btn btn-primary" id="commit-btn" disabled>Confirm &amp; Upload to Database</button>
+          <button class="btn" id="cancel-btn">Cancel</button>
+        </div>
+        <div id="commit-progress" class="hidden"><div class="progress"><div class="progress-fill" id="commit-bar"></div></div><div id="commit-msg" class="muted"></div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Upload History</h3></div>
+        <div class="table-wrap"><table id="tbl-uploads" class="data-table"></table></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- drill-down notice -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- ticket detail drawer -->
+  <div id="drawer-overlay" class="drawer-overlay hidden"></div>
+  <aside id="drawer" class="drawer hidden">
+    <div class="drawer-head"><h3 id="drawer-title"></h3><button class="btn btn-ghost" id="drawer-close">✕</button></div>
+    <div id="drawer-body" class="drawer-body"></div>
+  </aside>
+
+  <div id="loading" class="loading hidden"><div class="spinner"></div><div id="loading-msg">Loading data…</div></div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/mapping.js"></script>
+<script src="js/upload.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
