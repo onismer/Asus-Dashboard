@@ -23,8 +23,9 @@ const FILTER_DEFS = [
   ["f-status", "status", t => t.status],
   ["f-final",  "final",  t => t.final_status],
   ["f-resp",   "resp",   t => t.responsibility],
+  ["f-logo",   "logo",   t => t.logo_flag],
 ];
-const F = { year:"", quarter:"", region:"", branch:"", tier:"", budget:"", status:"", final:"", resp:"", search:"" };
+const F = { year:"", quarter:"", region:"", branch:"", tier:"", budget:"", status:"", final:"", resp:"", logo:"", search:"" };
 
 const $ = id => document.getElementById(id);
 const fmt = n => n == null ? "-" : Number(n).toLocaleString("en-IN");
@@ -127,7 +128,7 @@ function clearFilters() {
 
 function renderChips() {
   const box = $("active-filters"); box.innerHTML = "";
-  const labels = { year:"Year", quarter:"Quarter", region:"Region", branch:"Branch", tier:"Tier", budget:"Budget", status:"Stage", final:"Status", resp:"Resp.", search:"Search" };
+  const labels = { year:"Year", quarter:"Quarter", region:"Region", branch:"Branch", tier:"Tier", budget:"Budget", status:"Stage", final:"Status", resp:"Resp.", logo:"Logo", search:"Search" };
   Object.entries(F).forEach(([k, v]) => {
     if (!v) return;
     const chip = document.createElement("span");
@@ -148,6 +149,7 @@ function getFiltered() {
     (!F.status  || t.status === F.status) &&
     (!F.final   || t.final_status === F.final) &&
     (!F.resp    || t.responsibility === F.resp) &&
+    (!F.logo    || t.logo_flag === F.logo) &&
     (!F.search  || matchesSearch(t, F.search))
   );
 }
@@ -490,6 +492,18 @@ function renderStores() {
 // ============================================================
 function renderIssues() {
   const rows = getFiltered();
+
+  // budget category — received vs closed vs open
+  const buds = [...groupBy(rows, r => r.budget_category).entries()].sort((a, b) => b[1].length - a[1].length);
+  S.agg.budgetStatus = { headers: ["Budget Category","Received","Closed","Open"],
+    rows: buds.map(([k, v]) => [k, v.length, v.filter(t => t.final_status === "Closed").length, v.filter(t => t.final_status === "Open").length]) };
+  makeChart("ch-budget-status", { type: "bar",
+    data: { labels: buds.map(b => b[0]), datasets: [
+      { label: "Received", data: buds.map(([, v]) => v.length), backgroundColor: PALETTE[0] },
+      { label: "Closed", data: buds.map(([, v]) => v.filter(t => t.final_status === "Closed").length), backgroundColor: PALETTE[5] },
+      { label: "Open", data: buds.map(([, v]) => v.filter(t => t.final_status === "Open").length), backgroundColor: PALETTE[3] } ] } },
+    (label, dsi) => drill(dsi === 0 ? { budget: label } : { budget: label, final: dsi === 1 ? "Closed" : "Open" }, label));
+
   const cats = [...groupBy(rows, r => r.issue_category).entries()].sort((a, b) => b[1].length - a[1].length);
   const top12 = cats.slice(0, 12);
   makeChart("ch-issuecat", { type: "bar",
