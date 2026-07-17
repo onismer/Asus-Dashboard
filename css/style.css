@@ -33,11 +33,22 @@ h1,h2,h3 { margin: 0; font-weight: 600; }
 .brand-title { font-weight: 600; }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 .badge { background: var(--chip); color: var(--primary); border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 600; }
-.tabs { display: flex; gap: 2px; padding: 8px 20px 0; background: var(--card); border-bottom: 1px solid var(--border); overflow-x: auto; }
-.tab { border: none; background: none; padding: 9px 16px; cursor: pointer; font-size: 14px; color: var(--muted); border-bottom: 3px solid transparent; white-space: nowrap; }
-.tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
-.tab-upload { margin-left: auto; color: var(--accent); }
-main { padding: 16px 20px 60px; max-width: 1500px; margin: 0 auto; }
+/* ---------- sidebar layout ---------- */
+.layout { display: flex; align-items: flex-start; }
+.sidebar { position: sticky; top: 49px; width: 216px; min-width: 216px; height: calc(100vh - 49px); background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; padding: 14px 10px; overflow-y: auto; }
+.tab { border: none; background: none; padding: 10px 14px; cursor: pointer; font-size: 13.5px; color: var(--muted); text-align: left; border-left: 3px solid transparent; border-radius: 0 8px 8px 0; white-space: nowrap; }
+.tab:hover { background: var(--row-hover); color: var(--text); }
+.tab.active { color: var(--primary); border-left-color: var(--primary); background: var(--chip); font-weight: 600; }
+.tab-upload { margin-top: auto; color: var(--accent); }
+.content { flex: 1; min-width: 0; }
+main { padding: 16px 20px 60px; max-width: 1500px; }
+@media (max-width: 900px) {
+  .layout { flex-direction: column; }
+  .sidebar { position: static; width: 100%; min-width: 0; height: auto; flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--border); padding: 8px 12px; }
+  .tab { border-left: none; border-bottom: 3px solid transparent; border-radius: 8px 8px 0 0; }
+  .tab.active { border-left: none; border-bottom-color: var(--primary); }
+  .tab-upload { margin-top: 0; margin-left: auto; }
+}
 
 /* ---------- filter bar ---------- */
 .filterbar { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 20px; background: var(--card); border-bottom: 1px solid var(--border); align-items: flex-end; position: sticky; top: 49px; z-index: 15; }
