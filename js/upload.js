@@ -84,7 +84,7 @@ const Upload = (() => {
       showValidation(lookup);
     } catch (e) {
       $("parse-progress").classList.add("hidden");
-      A().toast("❌ " + e.message, 6000);
+      A().toast("Error: " + e.message, 6000);
     }
   }
 
@@ -214,13 +214,13 @@ const Upload = (() => {
         warnings: warnings.length, note,
       });
       progress("commit-bar", "commit-msg", 1, "Done — refreshing dashboard…");
-      A().toast(`✅ Upload complete: ${diff.added} new, ${diff.updated} updated${deleted ? ", " + deleted + " deleted" : ""}`, 5000);
+      A().toast(`Upload complete: ${diff.added} new, ${diff.updated} updated${deleted ? ", " + deleted + " deleted" : ""}`, 5000);
       reset();
       await A().loadData();
       loadHistory();
     } catch (e) {
       $("commit-btn").disabled = false;
-      A().toast("❌ " + e.message, 8000);
+      A().toast("Error: " + e.message, 8000);
       $("commit-msg").textContent = "Failed: " + e.message;
     }
   }
@@ -228,6 +228,7 @@ const Upload = (() => {
   // ---------------- history ----------------
   async function loadHistory() {
     const sb = A().S.sb;
+    if (!sb || typeof sb.from !== "function") return;
     const { data, error } = await sb.from("upload_logs").select("*").order("uploaded_at", { ascending: false }).limit(30);
     if (error || !data) return;
     const cols = ["Uploaded At","By","File","As On","Rows","New","Updated","Deleted","Stores","Warnings","Note"];

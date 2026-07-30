@@ -58,7 +58,7 @@ async function enterApp(session) {
   $("user-email").textContent = session.user.email;
   const { data: prof } = await S.sb.from("profiles").select("role").eq("id", session.user.id).single();
   S.role = prof ? prof.role : "viewer";
-  if (S.role === "uploader" || S.role === "admin") $("upload-tab-btn").classList.remove("hidden");
+  $("upload-tab-btn").classList.remove("hidden"); // uploads open to all signed-in users (audit-logged)
   await loadData();
 }
 
@@ -84,7 +84,7 @@ async function loadData() {
     $("as-on-badge").textContent = S.asOn ? "Data as on " + fmtDate(S.asOn) : (all.length ? "" : "No data yet — use Upload tab");
     buildFilterOptions();
     S.dirty = true; renderActive();
-    if (S.role !== "viewer") Upload.loadHistory();
+    Upload.loadHistory();
   } catch (e) {
     toast("Failed to load data: " + e.message, 5000);
   } finally { loading(false); }
@@ -201,6 +201,14 @@ function bindUI() {
   $("drawer-close").onclick = closeDrawer;
   $("drawer-overlay").onclick = closeDrawer;
 
+  // upload view sub-tabs (Upload File / Upload History)
+  document.querySelectorAll(".subtab").forEach(b => b.onclick = () => {
+    document.querySelectorAll(".subtab").forEach(x => x.classList.toggle("active", x === b));
+    $("upload-main").classList.toggle("hidden", b.dataset.sub !== "upload-main");
+    $("upload-history").classList.toggle("hidden", b.dataset.sub !== "upload-history");
+    if (b.dataset.sub === "upload-history") Upload.loadHistory();
+  });
+
   Upload.bind();
 }
 
@@ -254,7 +262,7 @@ const OPEN_BUCKETS = [["00 to 10 Days",0,10],["11 to 20 Days",11,20],["21 to 30 
 const openBucket = d => { if (d == null) return "(no date)"; const b = OPEN_BUCKETS.find(([, lo, hi]) => d >= lo && d <= hi); return b ? b[0] : "(no date)"; };
 
 // palette
-const PALETTE = ["#0057d8","#00a29a","#f2a53a","#d4380d","#7b61c9","#1f9d55","#e05d8a","#5b8dec","#98a1b3","#c4b13d"];
+const PALETTE = ["#1f4f96","#3f7cac","#c98a2d","#b3362a","#6d5fa8","#2e7d43","#a85d7a","#5b8dec","#8593a5","#9a8c4f"];
 function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
 
 function makeChart(id, cfg, onLabelClick) {
