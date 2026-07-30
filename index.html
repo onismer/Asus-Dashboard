@@ -81,20 +81,20 @@
     <section class="view" id="view-overview">
       <div class="kpi-grid" id="kpi-grid"></div>
       <div class="grid-2">
-        <div class="card"><div class="card-head"><h3>Quarterly — Received vs Closed vs Open</h3><button class="btn-mini export-agg" data-agg="quarterly">CSV</button></div><canvas id="ch-quarterly"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Quarterly — Received vs Closed vs Open</h3><button class="btn-mini export-agg" data-agg="quarterly">CSV</button></div><canvas id="ch-quarterly"></canvas><p class="chart-note hidden" id="note-quarterly">Excluding year 2025 tickets closed without rectification date</p></div>
         <div class="card"><div class="card-head"><h3>Ticket Stage Funnel (click to drill)</h3><button class="btn-mini export-agg" data-agg="stages">CSV</button></div><canvas id="ch-stages"></canvas></div>
       </div>
       <div class="grid-2">
         <div class="card"><div class="card-head"><h3>Budget Category Split</h3><button class="btn-mini export-agg" data-agg="budget">CSV</button></div><canvas id="ch-budget"></canvas></div>
-        <div class="card"><div class="card-head"><h3>Monthly Trend — Raised vs Rectified</h3><button class="btn-mini export-agg" data-agg="monthly">CSV</button></div><canvas id="ch-monthly"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Monthly Trend — Raised vs Rectified</h3><button class="btn-mini export-agg" data-agg="monthly">CSV</button></div><canvas id="ch-monthly"></canvas><p class="chart-note hidden" id="note-monthly">Excluding year 2025 tickets closed without rectification date</p></div>
       </div>
       <div class="card">
         <div class="card-head"><h3>Quarterly Performance (CP vs ASUS/RV)</h3><button class="btn-mini export-agg" data-agg="quarterlyDetail">CSV</button></div>
-        <div class="table-wrap"><table id="tbl-quarterly" class="data-table clickable"></table></div>
+        <div class="table-wrap"><table id="tbl-quarterly" class="data-table clickable"></table></div><p class="chart-note hidden" id="note-quarterly-tbl">Excluding year 2025 tickets closed without rectification date</p>
       </div>
       <div class="card">
         <div class="card-head"><h3>Half-Yearly Trend</h3><button class="btn-mini export-agg" data-agg="halfyear">CSV</button></div>
-        <div class="table-wrap"><table id="tbl-halfyear" class="data-table clickable"></table></div>
+        <div class="table-wrap"><table id="tbl-halfyear" class="data-table clickable"></table></div><p class="chart-note hidden" id="note-halfyear">Excluding year 2025 tickets closed without rectification date</p>
       </div>
     </section>
 
@@ -156,11 +156,11 @@
     <section class="view hidden" id="view-ageing">
       <div class="grid-2">
         <div class="card"><div class="card-head"><h3>Open Ticket Ageing (as on latest data, click to drill)</h3></div><canvas id="ch-open-ageing"></canvas></div>
-        <div class="card"><div class="card-head"><h3>Closure Ageing — CP vs ASUS/RV</h3></div><canvas id="ch-close-ageing"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Closure Ageing — CP vs ASUS/RV</h3></div><canvas id="ch-close-ageing"></canvas><p class="chart-note hidden" id="note-close-ageing">Excluding year 2025 tickets closed without rectification date</p></div>
       </div>
       <div class="grid-2">
-        <div class="card"><div class="card-head"><h3>TAT Compliance by Quarter (closed tickets)</h3></div><canvas id="ch-tat-comp"></canvas></div>
-        <div class="card"><div class="card-head"><h3>Avg TAT Trend by Quarter (days)</h3></div><canvas id="ch-tat-trend"></canvas></div>
+        <div class="card"><div class="card-head"><h3>TAT Compliance by Quarter (closed tickets)</h3></div><canvas id="ch-tat-comp"></canvas><p class="chart-note hidden" id="note-tat-comp">Excluding year 2025 tickets closed without rectification date</p></div>
+        <div class="card"><div class="card-head"><h3>Avg TAT Trend by Quarter (days)</h3></div><canvas id="ch-tat-trend"></canvas><p class="chart-note hidden" id="note-tat-trend">Excluding year 2025 tickets closed without rectification date</p></div>
       </div>
       <div class="card">
         <div class="card-head"><h3>Open Ticket Ageing Detail (click row to drill)</h3><button class="btn-mini export-agg" data-agg="openAgeing">CSV</button></div>
