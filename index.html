@@ -50,6 +50,7 @@
     <button class="tab" data-tab="budget">Budget &amp; Approvals</button>
     <button class="tab" data-tab="logo">Logo Logistics</button>
     <button class="tab" data-tab="explorer">Data Explorer</button>
+    <button class="tab tab-suggest" data-tab="suggest" id="suggest-tab-btn">Feature Suggestion / Query <span id="suggest-badge" class="notif hidden"></span></button>
     <button class="tab tab-upload hidden" data-tab="upload" id="upload-tab-btn">Upload Data</button>
   </nav>
   <div class="content">
@@ -220,6 +221,20 @@
           <span id="pg-info"></span>
           <button class="btn btn-ghost" id="pg-next">Next ›</button>
         </div>
+      </div>
+    </section>
+
+    <!-- ============ FEATURE SUGGESTION / QUERY ============ -->
+    <section class="view hidden" id="view-suggest">
+      <div class="card">
+        <div class="card-head"><h3>Post a Suggestion or Query</h3></div>
+        <p class="muted">Suggestions, queries and recommendations from any user. Entries stay on this wall until marked resolved.</p>
+        <textarea id="suggest-input" class="suggest-input" rows="3" placeholder="Write your suggestion, query or recommendation…"></textarea>
+        <div class="commit-row"><button class="btn btn-primary" id="suggest-post">Post</button></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Wall <span id="suggest-count" class="badge"></span></h3></div>
+        <div id="suggest-list"></div>
       </div>
     </section>
 
