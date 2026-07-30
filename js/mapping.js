@@ -266,8 +266,9 @@ function parseTicketRow(raw, headerLookup) {
   if (!row.store_name) warnings.push("missing Store Name");
   if (!row.issue_category) warnings.push("missing Issue Category");
   if (!row.budget_category) warnings.push("missing Budget Category");
-  if (row.final_status === "Closed" && !row.rectification_date)
-    warnings.push("Closed ticket without Rectification Date");
+  // Note: closed tickets without a Rectification Date are EXPECTED
+  // (2025 historical batch + rejected tickets) — imported as-is, excluded
+  // from closure-date charts with a footnote. No warning raised.
   if (row.rectification_date && row.issue_raised_date && row.rectification_date < row.issue_raised_date)
     warnings.push("Rectification Date earlier than Issue Raised Date");
 
