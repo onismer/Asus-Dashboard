@@ -85,11 +85,10 @@ async function loadData() {
     updateSuggestBadge();
     $("as-on-badge").textContent = S.asOn ? "Data as on " + fmtDate(S.asOn) : (all.length ? "" : "No data yet — use Upload tab");
     buildFilterOptions();
-    // default view = Live data (falls back to All when no live data exists yet)
+    // default view = Live data, always
     if (!S._sourceDefaulted) {
       S._sourceDefaulted = true;
-      const sel = $("f-source");
-      if ([...sel.options].some(o => o.value === "Live")) { sel.value = "Live"; F.source = "Live"; renderChips(); }
+      $("f-source").value = "Live"; F.source = "Live"; renderChips();
     }
     S.dirty = true; renderActive();
     Upload.loadHistory();
@@ -104,7 +103,8 @@ function fmtDate(d) { if (!d) return "-"; const [y, m, dd] = d.split("-"); retur
 function buildFilterOptions() {
   for (const [elId, , getter] of FILTER_DEFS) {
     const sel = $(elId), cur = sel.value;
-    const vals = [...new Set(S.tickets.map(getter).filter(v => v != null && v !== ""))];
+    let vals = [...new Set(S.tickets.map(getter).filter(v => v != null && v !== ""))];
+    if (elId === "f-source") vals = [...new Set(["Live", ...vals])];   // Live always offered (default view)
     vals.sort((a, b) => elId === "f-quarter" ? qKey(a) - qKey(b) : String(a).localeCompare(String(b)));
     sel.innerHTML = '<option value="">All</option>' + vals.map(v => `<option>${esc(v)}</option>`).join("");
     if (vals.includes(isNaN(cur) ? cur : Number(cur)) || vals.includes(cur)) sel.value = cur;
