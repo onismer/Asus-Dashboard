@@ -34,7 +34,7 @@
       <span id="as-on-badge" class="badge" title="Date of latest uploaded report"></span>
     </div>
     <div class="topbar-right">
-      <button class="btn btn-ghost" id="theme-toggle" title="Toggle dark mode">◐</button>
+      <button class="btn btn-ghost" id="theme-toggle" title="Toggle dark mode">Theme</button>
       <span id="user-email" class="muted"></span>
       <button class="btn btn-ghost" id="signout-btn">Sign out</button>
     </div>
@@ -42,13 +42,13 @@
 
   <div class="layout">
   <nav class="sidebar" id="tabs">
-    <button class="tab active" data-tab="overview">📊 Overview</button>
-    <button class="tab" data-tab="regional">🗺 Regional</button>
-    <button class="tab" data-tab="stores">🏬 Stores &amp; Cities</button>
-    <button class="tab" data-tab="issues">🛠 Issues &amp; Bottlenecks</button>
-    <button class="tab" data-tab="ageing">⏱ Ageing &amp; TAT</button>
-    <button class="tab" data-tab="explorer">🔍 Data Explorer</button>
-    <button class="tab tab-upload hidden" data-tab="upload" id="upload-tab-btn">⬆ Upload Data</button>
+    <button class="tab active" data-tab="overview">Overview</button>
+    <button class="tab" data-tab="regional">Regional</button>
+    <button class="tab" data-tab="stores">Stores &amp; Cities</button>
+    <button class="tab" data-tab="issues">Issues &amp; Bottlenecks</button>
+    <button class="tab" data-tab="ageing">Ageing &amp; TAT</button>
+    <button class="tab" data-tab="explorer">Data Explorer</button>
+    <button class="tab tab-upload hidden" data-tab="upload" id="upload-tab-btn">Upload Data</button>
   </nav>
   <div class="content">
 
@@ -66,9 +66,9 @@
     <div class="filter-group"><label>Logo/Non-Logo</label><select id="f-logo"></select></div>
     <div class="filter-group grow"><label>Search</label><input type="text" id="f-search" placeholder="store / city / ticket id…"></div>
     <div class="filter-actions">
-      <button class="btn btn-ghost" id="preset-save" title="Save current filters as preset">★ Save</button>
+      <button class="btn btn-ghost" id="preset-save" title="Save current filters as preset">Save</button>
       <select id="preset-list" title="Saved filter presets"><option value="">Presets…</option></select>
-      <button class="btn btn-ghost" id="filters-clear">✕ Clear</button>
+      <button class="btn btn-ghost" id="filters-clear">Clear</button>
     </div>
   </div>
   <div id="active-filters" class="active-filters"></div>
@@ -78,19 +78,19 @@
     <section class="view" id="view-overview">
       <div class="kpi-grid" id="kpi-grid"></div>
       <div class="grid-2">
-        <div class="card"><div class="card-head"><h3>Quarterly — Received vs Closed vs Open</h3><button class="btn-mini export-agg" data-agg="quarterly">⬇ CSV</button></div><canvas id="ch-quarterly"></canvas></div>
-        <div class="card"><div class="card-head"><h3>Ticket Stage Funnel (click to drill)</h3><button class="btn-mini export-agg" data-agg="stages">⬇ CSV</button></div><canvas id="ch-stages"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Quarterly — Received vs Closed vs Open</h3><button class="btn-mini export-agg" data-agg="quarterly">CSV</button></div><canvas id="ch-quarterly"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Ticket Stage Funnel (click to drill)</h3><button class="btn-mini export-agg" data-agg="stages">CSV</button></div><canvas id="ch-stages"></canvas></div>
       </div>
       <div class="grid-2">
-        <div class="card"><div class="card-head"><h3>Budget Category Split</h3><button class="btn-mini export-agg" data-agg="budget">⬇ CSV</button></div><canvas id="ch-budget"></canvas></div>
-        <div class="card"><div class="card-head"><h3>Monthly Trend — Raised vs Rectified</h3><button class="btn-mini export-agg" data-agg="monthly">⬇ CSV</button></div><canvas id="ch-monthly"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Budget Category Split</h3><button class="btn-mini export-agg" data-agg="budget">CSV</button></div><canvas id="ch-budget"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Monthly Trend — Raised vs Rectified</h3><button class="btn-mini export-agg" data-agg="monthly">CSV</button></div><canvas id="ch-monthly"></canvas></div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Quarterly Performance (CP vs ASUS/RV)</h3><button class="btn-mini export-agg" data-agg="quarterlyDetail">⬇ CSV</button></div>
+        <div class="card-head"><h3>Quarterly Performance (CP vs ASUS/RV)</h3><button class="btn-mini export-agg" data-agg="quarterlyDetail">CSV</button></div>
         <div class="table-wrap"><table id="tbl-quarterly" class="data-table clickable"></table></div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Half-Yearly Trend</h3><button class="btn-mini export-agg" data-agg="halfyear">⬇ CSV</button></div>
+        <div class="card-head"><h3>Half-Yearly Trend</h3><button class="btn-mini export-agg" data-agg="halfyear">CSV</button></div>
         <div class="table-wrap"><table id="tbl-halfyear" class="data-table clickable"></table></div>
       </div>
     </section>
@@ -102,11 +102,11 @@
         <div class="card"><div class="card-head"><h3>Avg Resolution TAT by Region (days)</h3></div><canvas id="ch-region-tat"></canvas></div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Region Summary (click row to drill)</h3><button class="btn-mini export-agg" data-agg="region">⬇ CSV</button></div>
+        <div class="card-head"><h3>Region Summary (click row to drill)</h3><button class="btn-mini export-agg" data-agg="region">CSV</button></div>
         <div class="table-wrap"><table id="tbl-region" class="data-table clickable"></table></div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Branch / State Summary (click row to drill)</h3><button class="btn-mini export-agg" data-agg="branch">⬇ CSV</button></div>
+        <div class="card-head"><h3>Branch / State Summary (click row to drill)</h3><button class="btn-mini export-agg" data-agg="branch">CSV</button></div>
         <div class="table-wrap"><table id="tbl-branch" class="data-table clickable"></table></div>
       </div>
     </section>
@@ -119,11 +119,11 @@
         <div class="card"><div class="card-head"><h3>City Tier Split</h3></div><canvas id="ch-tier"></canvas></div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Store-wise View <input id="store-search" class="inline-search" placeholder="search store…"></h3><button class="btn-mini export-agg" data-agg="store">⬇ CSV</button></div>
+        <div class="card-head"><h3>Store-wise View <input id="store-search" class="inline-search" placeholder="search store…"></h3><button class="btn-mini export-agg" data-agg="store">CSV</button></div>
         <div class="table-wrap tall"><table id="tbl-store" class="data-table clickable"></table></div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>City-wise View <input id="city-search" class="inline-search" placeholder="search city…"></h3><button class="btn-mini export-agg" data-agg="city">⬇ CSV</button></div>
+        <div class="card-head"><h3>City-wise View <input id="city-search" class="inline-search" placeholder="search city…"></h3><button class="btn-mini export-agg" data-agg="city">CSV</button></div>
         <div class="table-wrap tall"><table id="tbl-city" class="data-table clickable"></table></div>
       </div>
     </section>
@@ -131,7 +131,7 @@
     <!-- ============ ISSUES & BOTTLENECKS ============ -->
     <section class="view hidden" id="view-issues">
       <div class="card">
-        <div class="card-head"><h3>Budget Category — Received vs Closed vs Open (click to drill)</h3><button class="btn-mini export-agg" data-agg="budgetStatus">⬇ CSV</button></div>
+        <div class="card-head"><h3>Budget Category — Received vs Closed vs Open (click to drill)</h3><button class="btn-mini export-agg" data-agg="budgetStatus">CSV</button></div>
         <canvas id="ch-budget-status"></canvas>
       </div>
       <div class="grid-2">
@@ -140,11 +140,11 @@
       </div>
       <div class="grid-2">
         <div class="card"><div class="card-head"><h3>Avg Resolution Days by Issue Category (slowest first)</h3></div><canvas id="ch-cat-tat"></canvas></div>
-        <div class="card"><div class="card-head"><h3>Open Tickets Stuck by Stage &amp; Ageing</h3><button class="btn-mini export-agg" data-agg="stuck">⬇ CSV</button></div>
+        <div class="card"><div class="card-head"><h3>Open Tickets Stuck by Stage &amp; Ageing</h3><button class="btn-mini export-agg" data-agg="stuck">CSV</button></div>
           <div class="table-wrap"><table id="tbl-stuck" class="data-table clickable"></table></div></div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Issue Category Detail (click row to drill)</h3><button class="btn-mini export-agg" data-agg="issuecat">⬇ CSV</button></div>
+        <div class="card-head"><h3>Issue Category Detail (click row to drill)</h3><button class="btn-mini export-agg" data-agg="issuecat">CSV</button></div>
         <div class="table-wrap tall"><table id="tbl-issuecat" class="data-table clickable"></table></div>
       </div>
     </section>
@@ -160,7 +160,7 @@
         <div class="card"><div class="card-head"><h3>Avg TAT Trend by Quarter (days)</h3></div><canvas id="ch-tat-trend"></canvas></div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Open Ticket Ageing Detail (click row to drill)</h3><button class="btn-mini export-agg" data-agg="openAgeing">⬇ CSV</button></div>
+        <div class="card-head"><h3>Open Ticket Ageing Detail (click row to drill)</h3><button class="btn-mini export-agg" data-agg="openAgeing">CSV</button></div>
         <div class="table-wrap"><table id="tbl-open-ageing" class="data-table clickable"></table></div>
       </div>
     </section>
@@ -171,8 +171,8 @@
         <div class="card-head">
           <h3>Raw Ticket Data <span id="explorer-count" class="badge"></span></h3>
           <div class="head-actions">
-            <button class="btn btn-primary" id="export-xlsx">⬇ Export Excel (filtered)</button>
-            <button class="btn" id="export-csv">⬇ Export CSV (filtered)</button>
+            <button class="btn btn-primary" id="export-xlsx">Export Excel (filtered)</button>
+            <button class="btn" id="export-csv">Export CSV (filtered)</button>
           </div>
         </div>
         <div class="table-wrap tall"><table id="tbl-explorer" class="data-table clickable"></table></div>
@@ -186,12 +186,17 @@
 
     <!-- ============ UPLOAD ============ -->
     <section class="view hidden" id="view-upload">
+      <div class="subtabs">
+        <button class="subtab active" data-sub="upload-main">Upload File</button>
+        <button class="subtab" data-sub="upload-history">Upload History</button>
+      </div>
+      <div id="upload-main">
       <div class="card">
         <div class="card-head"><h3>Upload Daily Report</h3></div>
         <p class="muted">Upload the full cumulative Excel (same format as the “Details Sheet”). The parser validates the file and shows what will change <b>before</b> anything is written to the database. If a “Total Store Covered” sheet is present, the store master is refreshed from it too.</p>
         <div id="dropzone" class="dropzone">
           <input type="file" id="file-input" accept=".xlsx,.xls" hidden>
-          <div class="dz-inner">📄 Drag &amp; drop the Excel file here<br><span class="muted">or</span><br><button class="btn btn-primary" id="browse-btn" type="button">Browse file</button></div>
+          <div class="dz-inner">Drag &amp; drop the Excel file here<br><span class="muted">or</span><br><button class="btn btn-primary" id="browse-btn" type="button">Browse file</button></div>
         </div>
         <div id="parse-progress" class="hidden"><div class="progress"><div class="progress-fill" id="parse-bar"></div></div><div id="parse-msg" class="muted"></div></div>
       </div>
@@ -199,8 +204,8 @@
       <div class="card hidden" id="validation-card">
         <div class="card-head"><h3>Validation Report — <span id="val-filename"></span></h3></div>
         <div id="val-summary" class="val-summary"></div>
-        <details id="val-errors-box" class="hidden"><summary class="err">❌ Errors (rows skipped — fix &amp; re-upload to include them)</summary><ul id="val-errors"></ul></details>
-        <details id="val-warnings-box" class="hidden"><summary class="warn">⚠ Warnings (rows still uploaded)</summary><ul id="val-warnings"></ul></details>
+        <details id="val-errors-box" class="hidden"><summary class="err">Errors (rows skipped — fix &amp; re-upload to include them)</summary><ul id="val-errors"></ul></details>
+        <details id="val-warnings-box" class="hidden"><summary class="warn">Warnings (rows still uploaded)</summary><ul id="val-warnings"></ul></details>
         <details><summary>Preview — first 15 parsed rows</summary><div class="table-wrap"><table id="tbl-preview" class="data-table"></table></div></details>
         <div class="commit-row">
           <label class="chk"><input type="checkbox" id="opt-delete-missing"> Also delete <span id="del-count">0</span> ticket(s) in the database that are missing from this file</label>
@@ -210,11 +215,15 @@
         </div>
         <div id="commit-progress" class="hidden"><div class="progress"><div class="progress-fill" id="commit-bar"></div></div><div id="commit-msg" class="muted"></div></div>
       </div>
+      </div><!-- /upload-main -->
 
+      <div id="upload-history" class="hidden">
       <div class="card">
         <div class="card-head"><h3>Upload History</h3></div>
+        <p class="muted">Audit trail of every upload: who uploaded, when, which file, and what changed.</p>
         <div class="table-wrap"><table id="tbl-uploads" class="data-table"></table></div>
       </div>
+      </div><!-- /upload-history -->
     </section>
   </main>
 

@@ -98,12 +98,13 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_user();
 
 -- Helper: does the current user have write rights?
+-- Policy decision (July 2026): ANY signed-in user may upload; every upload is
+-- audit-logged in upload_logs. To restrict again, swap the body for:
+--   select exists (select 1 from public.profiles
+--                  where id = auth.uid() and role in ('uploader','admin'));
 create or replace function public.can_write()
 returns boolean language sql stable security definer set search_path = public as $$
-  select exists (
-    select 1 from public.profiles
-    where id = auth.uid() and role in ('uploader','admin')
-  );
+  select auth.uid() is not null;
 $$;
 
 -- ---------- ROW LEVEL SECURITY ----------
