@@ -415,17 +415,16 @@ function renderOverview() {
     const cpQ = closedInQ.filter(r => r.responsibility === "Channelplay");
     const rvQ = closedInQ.filter(r => r.responsibility !== "Channelplay");
     return { q, recv: recv.length, closed: closedInQ.length,
-      cp: cpQ.length, cpTat: avg(cpQ, r => r.rectification_time),
-      rv: rvQ.length, rvTat: avg(rvQ, r => r.rectification_time),
+      cp: cpQ.length, rv: rvQ.length,
       inTat: closedInQ.filter(r => r.tat_follow === "InTAT").length,
       open: recv.filter(r => r.final_status === "Open").length };
   });
-  S.agg.quarterlyDetail = { headers: ["Quarter","Received","Closed in Qtr","Closed by CP","CP Avg TAT","Closed by ASUS/RV","RV Avg TAT","In-TAT Closed","Still Open"],
-    rows: qd.map(r => [r.q, r.recv, r.closed, r.cp, fmt1(r.cpTat), r.rv, fmt1(r.rvTat), r.inTat, r.open]) };
+  S.agg.quarterlyDetail = { headers: ["Quarter","Received","Closed in Qtr","Closed by CP","Closed by ASUS/RV","In-TAT Closed","In-TAT %","Still Open"],
+    rows: qd.map(r => [r.q, r.recv, r.closed, r.cp, r.rv, r.inTat, pct(r.inTat, r.closed), r.open]) };
   renderTable("tbl-quarterly", S.agg.quarterlyDetail.headers, qd.map(r => ({
-    cells: [r.q, fmt(r.recv), fmt(r.closed), fmt(r.cp), fmt1(r.cpTat), fmt(r.rv), fmt1(r.rvTat), fmt(r.inTat), `<span class="pill open">${fmt(r.open)}</span>`],
-    numCols: [1,2,3,4,5,6,7,8], onClick: () => drill({ quarter: r.q }, r.q) })),
-    { totals: ["Total", fmt(qd.reduce((a, r) => a + r.recv, 0)), fmt(qd.reduce((a, r) => a + r.closed, 0)), fmt(qd.reduce((a, r) => a + r.cp, 0)), "", fmt(qd.reduce((a, r) => a + r.rv, 0)), "", fmt(qd.reduce((a, r) => a + r.inTat, 0)), fmt(qd.reduce((a, r) => a + r.open, 0))] });
+    cells: [r.q, fmt(r.recv), fmt(r.closed), fmt(r.cp), fmt(r.rv), fmt(r.inTat), pct(r.inTat, r.closed), `<span class="pill open">${fmt(r.open)}</span>`],
+    numCols: [1,2,3,4,5,6,7], onClick: () => drill({ quarter: r.q }, r.q) })),
+    { totals: ["Total", fmt(qd.reduce((a, r) => a + r.recv, 0)), fmt(qd.reduce((a, r) => a + r.closed, 0)), fmt(qd.reduce((a, r) => a + r.cp, 0)), fmt(qd.reduce((a, r) => a + r.rv, 0)), fmt(qd.reduce((a, r) => a + r.inTat, 0)), "", fmt(qd.reduce((a, r) => a + r.open, 0))] });
 
   // half-yearly
   const hyOf = d => d ? d.slice(0, 4) + (Number(d.slice(5, 7)) <= 6 ? " HY1" : " HY2") : null;
@@ -433,13 +432,14 @@ function renderOverview() {
   const hyRows = hys.map(h => {
     const recv = rows.filter(r => hyOf(r.issue_raised_date) === h);
     const clos = rows.filter(r => r.final_status === "Closed" && hyOf(r.rectification_date) === h);
-    return { h, recv: recv.length, closed: clos.length, tat: avg(clos, r => r.rectification_time) };
+    const inT = clos.filter(r => r.tat_follow === "InTAT").length;
+    return { h, recv: recv.length, closed: clos.length, inTatPct: pct(inT, clos.length) };
   });
-  S.agg.halfyear = { headers: ["Half Year","Received","Closed","Avg TAT (days)"], rows: hyRows.map(r => [r.h, r.recv, r.closed, fmt1(r.tat)]) };
+  S.agg.halfyear = { headers: ["Half Year","Received","Closed","In-TAT %"], rows: hyRows.map(r => [r.h, r.recv, r.closed, r.inTatPct]) };
   renderTable("tbl-halfyear", S.agg.halfyear.headers, hyRows.map((r, i) => {
     const prev = hyRows[i - 1];
     const delta = prev ? ((r.recv - prev.recv) >= 0 ? " ▲" : " ▼") : "";
-    return { cells: [r.h, fmt(r.recv) + delta, fmt(r.closed), fmt1(r.tat)], numCols: [1,2,3] };
+    return { cells: [r.h, fmt(r.recv) + delta, fmt(r.closed), r.inTatPct], numCols: [1,2,3] };
   }));
 }
 
@@ -457,23 +457,25 @@ function renderRegional() {
     (label, dsi) => drill({ region: label, final: dsi === 0 ? "Open" : "Closed" }, label));
 
   makeChart("ch-region-tat", { type: "bar",
-    data: { labels: regs.map(r => r[0]), datasets: [{ label: "Avg TAT (days)", data: regs.map(([, v]) => avg(v.filter(t => t.final_status === "Closed"), t => t.rectification_time)), backgroundColor: PALETTE[1] }] },
-    options: { plugins: { legend: { display: false } } } },
+    data: { labels: regs.map(r => r[0]), datasets: [
+      { label: "In TAT", data: regs.map(([, v]) => v.filter(t => t.final_status === "Closed" && t.tat_follow === "InTAT").length), backgroundColor: PALETTE[5] },
+      { label: "Out of TAT", data: regs.map(([, v]) => v.filter(t => t.final_status === "Closed" && t.tat_follow === "OutTAT").length), backgroundColor: PALETTE[3] } ] },
+    options: { scales: { x: { stacked: true }, y: { stacked: true } } } },
     label => drill({ region: label, final: "Closed" }, label));
 
   const regRows = regs.map(([k, v]) => { const st = stat(v); return { k, ...st }; });
-  S.agg.region = { headers: ["Region","Received","Closed","Open","Closure %","Avg TAT","In-TAT % (closed)","Stores Affected"],
-    rows: regRows.map(r => [r.k, r.total, r.closed, r.open, pct(r.closed, r.total), fmt1(r.avgTat), pct(r.inTat, r.closed), r.stores]) };
+  S.agg.region = { headers: ["Region","Received","Closed","Open","Closure %","In-TAT % (closed)","Stores Affected"],
+    rows: regRows.map(r => [r.k, r.total, r.closed, r.open, pct(r.closed, r.total), pct(r.inTat, r.closed), r.stores]) };
   renderTable("tbl-region", S.agg.region.headers, regRows.map(r => ({
-    cells: [r.k, fmt(r.total), fmt(r.closed), `<span class="pill open">${fmt(r.open)}</span>`, pct(r.closed, r.total), fmt1(r.avgTat), pct(r.inTat, r.closed), fmt(r.stores)],
-    numCols: [1,2,3,4,5,6,7], onClick: () => drill({ region: r.k }, r.k) })));
+    cells: [r.k, fmt(r.total), fmt(r.closed), `<span class="pill open">${fmt(r.open)}</span>`, pct(r.closed, r.total), pct(r.inTat, r.closed), fmt(r.stores)],
+    numCols: [1,2,3,4,5,6], onClick: () => drill({ region: r.k }, r.k) })));
 
   const brs = [...groupBy(rows, r => r.branch).entries()].sort((a, b) => b[1].length - a[1].length);
   const brRows = brs.map(([k, v]) => ({ k, region: v[0].region, ...stat(v) }));
-  S.agg.branch = { headers: ["Branch","Region","Received","Closed","Open","Closure %","Avg TAT","Stores Affected"],
-    rows: brRows.map(r => [r.k, r.region, r.total, r.closed, r.open, pct(r.closed, r.total), fmt1(r.avgTat), r.stores]) };
+  S.agg.branch = { headers: ["Branch","Region","Received","Closed","Open","Closure %","In-TAT % (closed)","Stores Affected"],
+    rows: brRows.map(r => [r.k, r.region, r.total, r.closed, r.open, pct(r.closed, r.total), pct(r.inTat, r.closed), r.stores]) };
   renderTable("tbl-branch", S.agg.branch.headers, brRows.map(r => ({
-    cells: [r.k, r.region || "-", fmt(r.total), fmt(r.closed), `<span class="pill open">${fmt(r.open)}</span>`, pct(r.closed, r.total), fmt1(r.avgTat), fmt(r.stores)],
+    cells: [r.k, r.region || "-", fmt(r.total), fmt(r.closed), `<span class="pill open">${fmt(r.open)}</span>`, pct(r.closed, r.total), pct(r.inTat, r.closed), fmt(r.stores)],
     numCols: [2,3,4,5,6,7], onClick: () => drill({ branch: r.k }, r.k) })));
 }
 
@@ -507,20 +509,20 @@ function renderStores() {
   const sq = $("store-search").value.trim().toLowerCase();
   const stRows = stores.filter(([k]) => !sq || String(k).toLowerCase().includes(sq)).slice(0, 400)
     .map(([k, v]) => ({ k, city: v[0].city, region: v[0].region, branch: v[0].branch, type: v[0].store_type, ...stat(v) }));
-  S.agg.store = { headers: ["Store","City","Region","Branch","Type","Tickets","Open","Closed","Avg TAT"],
-    rows: stRows.map(r => [r.k, r.city, r.region, r.branch, r.type, r.total, r.open, r.closed, fmt1(r.avgTat)]) };
+  S.agg.store = { headers: ["Store","City","Region","Branch","Type","Tickets","Open","Closed"],
+    rows: stRows.map(r => [r.k, r.city, r.region, r.branch, r.type, r.total, r.open, r.closed]) };
   renderTable("tbl-store", S.agg.store.headers, stRows.map(r => ({
-    cells: [r.k, r.city || "-", r.region || "-", r.branch || "-", r.type || "-", fmt(r.total), `<span class="pill open">${fmt(r.open)}</span>`, fmt(r.closed), fmt1(r.avgTat)],
-    numCols: [5,6,7,8], onClick: () => drill({ search: String(r.k).toLowerCase() }, r.k) })));
+    cells: [r.k, r.city || "-", r.region || "-", r.branch || "-", r.type || "-", fmt(r.total), `<span class="pill open">${fmt(r.open)}</span>`, fmt(r.closed)],
+    numCols: [5,6,7], onClick: () => drill({ search: String(r.k).toLowerCase() }, r.k) })));
 
   const cq = $("city-search").value.trim().toLowerCase();
   const ctRows = cities.filter(([k]) => !cq || String(k).toLowerCase().includes(cq)).slice(0, 400)
     .map(([k, v]) => ({ k, tier: v[0].city_classification, state: v[0].state, region: v[0].region, ...stat(v) }));
-  S.agg.city = { headers: ["City","Tier","State","Region","Tickets","Open","Closed","Avg TAT","Stores"],
-    rows: ctRows.map(r => [r.k, r.tier, r.state, r.region, r.total, r.open, r.closed, fmt1(r.avgTat), r.stores]) };
+  S.agg.city = { headers: ["City","Tier","State","Region","Tickets","Open","Closed","Stores"],
+    rows: ctRows.map(r => [r.k, r.tier, r.state, r.region, r.total, r.open, r.closed, r.stores]) };
   renderTable("tbl-city", S.agg.city.headers, ctRows.map(r => ({
-    cells: [r.k, r.tier || "-", r.state || "-", r.region || "-", fmt(r.total), `<span class="pill open">${fmt(r.open)}</span>`, fmt(r.closed), fmt1(r.avgTat), fmt(r.stores)],
-    numCols: [4,5,6,7,8], onClick: () => drill({ search: String(r.k).toLowerCase() }, r.k) })));
+    cells: [r.k, r.tier || "-", r.state || "-", r.region || "-", fmt(r.total), `<span class="pill open">${fmt(r.open)}</span>`, fmt(r.closed), fmt(r.stores)],
+    numCols: [4,5,6,7], onClick: () => drill({ search: String(r.k).toLowerCase() }, r.k) })));
 }
 
 // ============================================================
@@ -553,10 +555,13 @@ function renderIssues() {
     options: { indexAxis: "y", plugins: { legend: { display: false } } } },
     label => drill({ search: label.toLowerCase(), final: "Open" }, label));
 
-  const slow = cats.map(([k, v]) => [k, avg(v.filter(t => t.final_status === "Closed"), t => t.rectification_time), v.length])
-    .filter(x => x[1] != null && x[2] >= 10).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  const slow = cats.map(([k, v]) => {
+    const c = v.filter(t => t.final_status === "Closed" && t.tat_follow);
+    const out = c.filter(t => t.tat_follow === "OutTAT").length;
+    return [k, c.length ? 100 * out / c.length : null, c.length];
+  }).filter(x => x[1] != null && x[2] >= 10).sort((a, b) => b[1] - a[1]).slice(0, 12);
   makeChart("ch-cat-tat", { type: "bar",
-    data: { labels: slow.map(s => s[0]), datasets: [{ label: "Avg days to close", data: slow.map(s => s[1]), backgroundColor: PALETTE[2] }] },
+    data: { labels: slow.map(s => s[0]), datasets: [{ label: "Out-of-TAT %", data: slow.map(s => +s[1].toFixed(1)), backgroundColor: PALETTE[2] }] },
     options: { indexAxis: "y", plugins: { legend: { display: false } } } },
     label => drill({ search: label.toLowerCase(), final: "Closed" }, label));
 
@@ -574,10 +579,10 @@ function renderIssues() {
     onClick: () => drill({ status: r.st, final: "Open" }, r.st) })));
 
   const catRows = cats.map(([k, v]) => ({ k, budget: v[0].budget_category, ...stat(v) }));
-  S.agg.issuecat = { headers: ["Issue Category","Budget Cat.","Tickets","Share %","Open","Closed","Avg TAT"],
-    rows: catRows.map(r => [r.k, r.budget, r.total, pct(r.total, rows.length), r.open, r.closed, fmt1(r.avgTat)]) };
+  S.agg.issuecat = { headers: ["Issue Category","Budget Cat.","Tickets","Share %","Open","Closed","In-TAT % (closed)"],
+    rows: catRows.map(r => [r.k, r.budget, r.total, pct(r.total, rows.length), r.open, r.closed, pct(r.inTat, r.closed)]) };
   renderTable("tbl-issuecat", S.agg.issuecat.headers, catRows.map(r => ({
-    cells: [r.k, r.budget || "-", fmt(r.total), pct(r.total, rows.length), `<span class="pill open">${fmt(r.open)}</span>`, fmt(r.closed), fmt1(r.avgTat)],
+    cells: [r.k, r.budget || "-", fmt(r.total), pct(r.total, rows.length), `<span class="pill open">${fmt(r.open)}</span>`, fmt(r.closed), pct(r.inTat, r.closed)],
     numCols: [2,3,4,5,6], onClick: () => drill({ search: String(r.k).toLowerCase() }, r.k) })));
 }
 
@@ -611,11 +616,15 @@ function renderAgeing() {
       { label: "Out of TAT", data: quarters.map(q => closed.filter(r => r.quarter_rectified === q && r.tat_follow === "OutTAT").length), backgroundColor: PALETTE[3] } ] },
     options: { scales: { x: { stacked: true }, y: { stacked: true } } } });
 
+  const inTatPct = subset => {
+    const c = subset.filter(r => r.tat_follow);
+    return c.length ? +((100 * c.filter(r => r.tat_follow === "InTAT").length) / c.length).toFixed(1) : null;
+  };
   makeChart("ch-tat-trend", { type: "line",
     data: { labels: quarters, datasets: [
-      { label: "Overall", data: quarters.map(q => avg(closed.filter(r => r.quarter_rectified === q), r => r.rectification_time)), borderColor: PALETTE[0], tension: .3 },
-      { label: "Channelplay", data: quarters.map(q => avg(closed.filter(r => r.quarter_rectified === q && r.responsibility === "Channelplay"), r => r.rectification_time)), borderColor: PALETTE[1], tension: .3 },
-      { label: "ASUS/RV", data: quarters.map(q => avg(closed.filter(r => r.quarter_rectified === q && r.responsibility !== "Channelplay"), r => r.rectification_time)), borderColor: PALETTE[2], tension: .3 } ] } });
+      { label: "Overall In-TAT %", data: quarters.map(q => inTatPct(closed.filter(r => r.quarter_rectified === q))), borderColor: PALETTE[0], tension: .3 },
+      { label: "Channelplay", data: quarters.map(q => inTatPct(closed.filter(r => r.quarter_rectified === q && r.responsibility === "Channelplay"))), borderColor: PALETTE[1], tension: .3 },
+      { label: "ASUS/RV", data: quarters.map(q => inTatPct(closed.filter(r => r.quarter_rectified === q && r.responsibility !== "Channelplay"))), borderColor: PALETTE[2], tension: .3 } ] } });
 
   const oaRows = bucketNames.map((bn, i) => {
     const inB = open.filter(t => openBucket(openAgeDays(t)) === bn);
@@ -808,7 +817,7 @@ const EXPLORER_COLS = [
   ["ticket_id","Ticket ID"],["data_source","Source"],["issue_raised_date","Raised"],["region","Region"],["branch","Branch"],
   ["store_name","Store"],["city","City"],["city_classification","Tier"],["issue_category","Issue Category"],
   ["budget_category","Budget"],["status","Stage"],["final_status","Open/Closed"],["responsibility","Resp."],
-  ["rectification_date","Rectified"],["rectification_time","TAT (days)"],["tat_follow","TAT Flag"],
+  ["rectification_date","Rectified"],["tat_follow","TAT Flag"],
 ];
 function renderExplorer() {
   const rows = getFiltered();
@@ -823,7 +832,7 @@ function renderExplorer() {
       if (k.endsWith("_date")) return fmtDate(t[k]);
       return esc(t[k] == null ? "-" : t[k]);
     }),
-    numCols: [14], onClick: () => openDrawer(t) })));
+    numCols: [], onClick: () => openDrawer(t) })));
 }
 
 const linkOrText = v => /^https?:\/\//i.test(String(v)) ?
