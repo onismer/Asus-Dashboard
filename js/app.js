@@ -320,11 +320,26 @@ function drill(patch, label) {
   toast("Drilled into: " + (label || "selection") + " — showing underlying tickets");
 }
 
+// Footnotes under closure-date charts. Adaptive to the current selection:
+//  - historical 2025 tickets closed without a rectification date (user-specified wording)
+//  - live Rejected tickets (closed with no rectification date by definition)
+function toggleClosureNotes(rows, ids) {
+  const noRect = rows.filter(r => r.final_status === "Closed" && !r.rectification_date);
+  const hist = noRect.filter(r => r.data_source === "Historical: 2025").length;
+  const rej  = noRect.length - hist;
+  const parts = [];
+  if (hist) parts.push("Excluding year 2025 tickets closed without rectification date");
+  if (rej)  parts.push("Excluding rejected tickets closed without rectification date");
+  const text = parts.join(" · ");
+  ids.forEach(id => { const el = $(id); if (el) { el.textContent = text; el.classList.toggle("hidden", !parts.length); } });
+}
+
 // ============================================================
 // OVERVIEW
 // ============================================================
 function renderOverview() {
   const rows = getFiltered();
+  toggleClosureNotes(rows, ["note-quarterly", "note-monthly", "note-quarterly-tbl", "note-halfyear"]);
   const s = stat(rows);
   const cp = rows.filter(r => r.responsibility === "Channelplay");
   const rv = rows.filter(r => r.responsibility && r.responsibility !== "Channelplay");
@@ -562,6 +577,7 @@ function renderIssues() {
 // ============================================================
 function renderAgeing() {
   const rows = getFiltered();
+  toggleClosureNotes(rows, ["note-close-ageing", "note-tat-comp", "note-tat-trend"]);
   const open = rows.filter(r => r.final_status === "Open");
   const bucketNames = OPEN_BUCKETS.map(b => b[0]);
   const openCounts = bucketNames.map(bn => open.filter(t => openBucket(openAgeDays(t)) === bn).length);

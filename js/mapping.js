@@ -132,6 +132,10 @@ const DATE_FIELDS = new Set([
   "logo_dispatch_date", "logo_delivery_date",
 ]);
 const NUM_FIELDS  = new Set(["approval_days", "tat_city_type", "rectification_time", "total_budget"]);
+// Reference-only date columns: parsed silently (no validation warnings);
+// unparseable raw values (e.g. "Q4 2023", "Docket Details Not Available")
+// are preserved in `extra` so nothing is lost in the drawer/exports.
+const SILENT_DATE_FIELDS = new Set(["asset_installation_date", "execution_tentative_date"]);
 const INT_FIELDS  = new Set(["issue_raised_year", "rectified_year"]);
 
 // ---------- value normalization (fixes inconsistent casing in source) ----------
@@ -217,7 +221,13 @@ function parseTicketRow(raw, headerLookup) {
     let v = raw[origHeader];
     if (DATE_FIELDS.has(dbField)) {
       const d = parseDate(v);
-      if (d === undefined) { warnings.push(`unreadable date in "${origHeader}": "${v}"`); row[dbField] = null; }
+      if (d === undefined) {
+        if (SILENT_DATE_FIELDS.has(dbField)) {
+          const rawS = cleanStr(v);                       // keep raw text for reference
+          if (rawS) row.extra[normHeader(origHeader)] = rawS;
+        } else warnings.push(`unreadable date in "${origHeader}": "${v}"`);
+        row[dbField] = null;
+      }
       else row[dbField] = d;
     } else if (NUM_FIELDS.has(dbField)) {
       const n = parseNum(v);
