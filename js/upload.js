@@ -220,17 +220,53 @@ const Upload = (() => {
     const { rows, storeCodes, fileName, asOn, warnings, diff, file } = pending;
     $("commit-btn").disabled = true;
     $("commit-progress").classList.remove("hidden");
+    let logId = null;
     try {
-      // 1. upsert tickets in chunks
       const chunk = CONFIG.UPSERT_CHUNK || 500;
+      const wantDelete = $("opt-delete-missing").checked && diff.missing.length;
+
+      // 0. build before-image snapshots (for the Remove-upload rollback)
+      progress("commit-bar", "commit-msg", .02, "Preparing rollback snapshots…");
+      const existing = new Map(A().S.tickets.map(t => [t.ticket_id, t]));
+      const snapshots = [];
+      for (const r of rows) {
+        const ex = existing.get(r.ticket_id);
+        if (!ex) snapshots.push({ ticket_id: r.ticket_id, action: "insert", prev: null });
+        else if (!ex.frozen) snapshots.push({ ticket_id: r.ticket_id, action: "update", prev: ex });
+      }
+      if (wantDelete) for (const id of diff.missing) {
+        const ex = existing.get(id);
+        if (ex && !ex.frozen) snapshots.push({ ticket_id: id, action: "delete", prev: ex });
+      }
+
+      // 1. create the audit-log entry first (snapshots reference it)
+      const { data: logRow, error: logErr } = await sb.from("upload_logs").insert({
+        uploaded_by: A().S.session.user.email, file_name: fileName, as_on_date: asOn,
+        total_rows: rows.length, inserted_rows: diff.added, updated_rows: diff.updated,
+        deleted_rows: 0, store_count: storeCodes.length || null,
+        warnings: warnings.length, snapshot_rows: snapshots.length,
+        note: "in progress…",
+      }).select("id").single();
+      if (logErr) throw new Error("Audit log failed: " + logErr.message);
+      logId = logRow.id;
+
+      // 2. store snapshots
+      for (let i = 0; i < snapshots.length; i += chunk) {
+        const { error } = await sb.from("upload_snapshots").insert(
+          snapshots.slice(i, i + chunk).map(s => ({ ...s, upload_id: logId })));
+        if (error) throw new Error("Snapshot save failed: " + error.message);
+        progress("commit-bar", "commit-msg", .05 + (i / (snapshots.length + 1)) * .15, `Saving rollback snapshots… ${Math.min(i + chunk, snapshots.length)}/${snapshots.length}`);
+      }
+
+      // 3. upsert tickets in chunks
       for (let i = 0; i < rows.length; i += chunk) {
         const { error } = await sb.from("tickets").upsert(rows.slice(i, i + chunk), { onConflict: "ticket_id" });
         if (error) throw new Error("Upsert failed: " + error.message);
-        progress("commit-bar", "commit-msg", (i + chunk) / (rows.length + 1) * .7, `Uploading tickets… ${Math.min(i + chunk, rows.length)}/${rows.length}`);
+        progress("commit-bar", "commit-msg", .2 + (i + chunk) / (rows.length + 1) * .5, `Uploading tickets… ${Math.min(i + chunk, rows.length)}/${rows.length}`);
       }
-      // 2. optional delete of missing tickets
+      // 4. optional delete of missing tickets
       let deleted = 0;
-      if ($("opt-delete-missing").checked && diff.missing.length) {
+      if (wantDelete) {
         for (let i = 0; i < diff.missing.length; i += 200) {
           const ids = diff.missing.slice(i, i + 200);
           const { error } = await sb.from("tickets").delete().in("ticket_id", ids);
@@ -238,7 +274,7 @@ const Upload = (() => {
           deleted += ids.length;
         }
       }
-      // 3. refresh store master (replace-all) if sheet present
+      // 5. refresh store master (replace-all) if sheet present
       if (storeCodes.length) {
         progress("commit-bar", "commit-msg", .78, "Refreshing store master…");
         const { error: delErr } = await sb.from("stores").delete().neq("store_code", "");
@@ -248,7 +284,7 @@ const Upload = (() => {
           if (error) throw new Error("Store master insert failed: " + error.message);
         }
       }
-      // 4. backup original file to storage (best effort)
+      // 6. backup original file to storage (best effort)
       let note = "";
       if ($("opt-backup").checked) {
         progress("commit-bar", "commit-msg", .88, "Backing up original file…");
@@ -256,16 +292,13 @@ const Upload = (() => {
         const { error } = await sb.storage.from(CONFIG.BACKUP_BUCKET).upload(path, file);
         note = error ? "backup skipped: " + error.message : "backup: " + path;
       }
-      // 5. audit log
-      progress("commit-bar", "commit-msg", .95, "Writing audit log…");
-      await sb.from("upload_logs").insert({
-        uploaded_by: A().S.session.user.email, file_name: fileName, as_on_date: asOn,
-        total_rows: rows.length, inserted_rows: diff.added, updated_rows: diff.updated,
-        deleted_rows: deleted, store_count: storeCodes.length || null,
-        warnings: warnings.length,
+      // 7. finalise the audit log entry
+      progress("commit-bar", "commit-msg", .95, "Finalising audit log…");
+      await sb.from("upload_logs").update({
+        deleted_rows: deleted,
         note: [pending.format === "legacy" ? "historical import (frozen)" : "daily tracker (live)",
                diff.frozenSkipped ? diff.frozenSkipped + " frozen rows skipped" : "", note].filter(Boolean).join("; "),
-      });
+      }).eq("id", logId);
       progress("commit-bar", "commit-msg", 1, "Done — refreshing dashboard…");
       A().toast(`Upload complete: ${diff.added} new, ${diff.updated} updated${deleted ? ", " + deleted + " deleted" : ""}`, 5000);
       reset();
@@ -275,21 +308,83 @@ const Upload = (() => {
       $("commit-btn").disabled = false;
       A().toast("Error: " + e.message, 8000);
       $("commit-msg").textContent = "Failed: " + e.message;
+      if (logId) await sb.from("upload_logs").update({ note: "FAILED: " + e.message }).eq("id", logId);
     }
+  }
+
+  // ---------------- remove / rollback an upload ----------------
+  async function removeUpload(log, allLogs) {
+    const sb = A().S.sb;
+    // active (not removed) later uploads with rollback data
+    const newer = allLogs.filter(l => !l.removed_at && l.snapshot_rows != null &&
+      new Date(l.uploaded_at) > new Date(log.uploaded_at) && !/historical import/i.test(l.note || ""));
+    if (!confirm(`Remove upload "${log.file_name}" (${new Date(log.uploaded_at).toLocaleString("en-IN")})?\n\nIts inserted tickets will be deleted and overwritten tickets restored to their previous values.`)) return;
+    let targets = [log];
+    if (newer.length) {
+      const cascade = confirm(`${newer.length} upload(s) were made AFTER this file.\n\nAlso clear those later upload(s)?\n\nOK = YES, remove them too (recommended — keeps data consistent)\nCancel = NO, remove only this upload`);
+      if (cascade) targets = [...newer, log];   // newest first
+    }
+    targets.sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at));
+    A().loading(true, "Rolling back…");
+    try {
+      for (const t of targets) {
+        // fetch this upload's snapshots (paginated)
+        const snaps = [];
+        for (let from = 0; ; from += 1000) {
+          const { data, error } = await sb.from("upload_snapshots").select("ticket_id,action,prev")
+            .eq("upload_id", t.id).order("id").range(from, from + 999);
+          if (error) throw new Error("Snapshot fetch failed: " + error.message);
+          snaps.push(...data);
+          if (data.length < 1000) break;
+        }
+        // restore overwritten/deleted rows to their previous values
+        const restore = snaps.filter(s => s.action !== "insert" && s.prev).map(s => s.prev);
+        for (let i = 0; i < restore.length; i += 500) {
+          const { error } = await sb.from("tickets").upsert(restore.slice(i, i + 500), { onConflict: "ticket_id" });
+          if (error) throw new Error("Restore failed: " + error.message);
+        }
+        // delete rows this upload inserted
+        const delIds = snaps.filter(s => s.action === "insert").map(s => s.ticket_id);
+        for (let i = 0; i < delIds.length; i += 200) {
+          const { error } = await sb.from("tickets").delete().in("ticket_id", delIds.slice(i, i + 200));
+          if (error) throw new Error("Rollback delete failed: " + error.message);
+        }
+        // mark the history row as removed (kept for audit)
+        const { error: mErr } = await sb.from("upload_logs").update({
+          removed_by: A().S.session.user.email, removed_at: new Date().toISOString(),
+        }).eq("id", t.id);
+        if (mErr) throw new Error("Could not mark upload removed: " + mErr.message);
+      }
+      A().toast(`Rolled back ${targets.length} upload(s)`, 5000);
+      await A().loadData();
+      loadHistory();
+    } catch (e) {
+      A().toast("Rollback error: " + e.message, 8000);
+    } finally { A().loading(false); }
   }
 
   // ---------------- history ----------------
   async function loadHistory() {
     const sb = A().S.sb;
     if (!sb || typeof sb.from !== "function") return;
-    const { data, error } = await sb.from("upload_logs").select("*").order("uploaded_at", { ascending: false }).limit(30);
+    const { data, error } = await sb.from("upload_logs").select("*").order("uploaded_at", { ascending: false }).limit(50);
     if (error || !data) return;
-    const cols = ["Uploaded At","By","File","As On","Rows","New","Updated","Deleted","Stores","Warnings","Note"];
+    const isAdmin = A().S.role === "admin";
+    const cols = ["Uploaded At","By","File","As On","Rows","New","Updated","Deleted","Stores","Warnings","Note","Action"];
     let html = "<thead><tr>" + cols.map(c => `<th>${c}</th>`).join("") + "</tr></thead><tbody>";
-    for (const r of data) {
-      html += `<tr><td>${new Date(r.uploaded_at).toLocaleString("en-IN")}</td><td>${A().esc(r.uploaded_by || "-")}</td><td>${A().esc(r.file_name || "-")}</td><td>${A().fmtDate(r.as_on_date)}</td><td class="num">${r.total_rows ?? "-"}</td><td class="num">${r.inserted_rows ?? "-"}</td><td class="num">${r.updated_rows ?? "-"}</td><td class="num">${r.deleted_rows ?? 0}</td><td class="num">${r.store_count ?? "-"}</td><td class="num">${r.warnings ?? 0}</td><td>${A().esc(r.note || "")}</td></tr>`;
-    }
+    data.forEach((r, i) => {
+      const historical = /historical import/i.test(r.note || "");
+      let action;
+      if (r.removed_at) action = `<span class="removed-tag">Removed by: ${A().esc(r.removed_by || "?")} (${new Date(r.removed_at).toLocaleDateString("en-IN")})</span>`;
+      else if (!isAdmin) action = "";
+      else if (historical) action = `<span class="muted" title="Protected historical dataset — cannot be removed from the dashboard">protected</span>`;
+      else if (r.snapshot_rows == null) action = `<span class="muted" title="Uploaded before rollback support — no snapshot available">no rollback data</span>`;
+      else action = `<button class="btn-mini btn-remove" data-i="${i}">Remove</button>`;
+      html += `<tr class="${r.removed_at ? "removed-row" : ""}"><td>${new Date(r.uploaded_at).toLocaleString("en-IN")}</td><td>${A().esc(r.uploaded_by || "-")}</td><td>${A().esc(r.file_name || "-")}</td><td>${A().fmtDate(r.as_on_date)}</td><td class="num">${r.total_rows ?? "-"}</td><td class="num">${r.inserted_rows ?? "-"}</td><td class="num">${r.updated_rows ?? "-"}</td><td class="num">${r.deleted_rows ?? 0}</td><td class="num">${r.store_count ?? "-"}</td><td class="num">${r.warnings ?? 0}</td><td>${A().esc(r.note || "")}</td><td>${action}</td></tr>`;
+    });
     $("tbl-uploads").innerHTML = html + "</tbody>";
+    $("tbl-uploads").querySelectorAll(".btn-remove").forEach(b =>
+      b.onclick = () => removeUpload(data[Number(b.dataset.i)], data));
   }
 
   return { bind, loadHistory };
