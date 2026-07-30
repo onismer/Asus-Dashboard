@@ -103,7 +103,7 @@
     <section class="view hidden" id="view-regional">
       <div class="grid-2">
         <div class="card"><div class="card-head"><h3>Tickets by Region (click bar to drill)</h3></div><canvas id="ch-region"></canvas></div>
-        <div class="card"><div class="card-head"><h3>Avg Resolution TAT by Region (days)</h3></div><canvas id="ch-region-tat"></canvas></div>
+        <div class="card"><div class="card-head"><h3>TAT Compliance by Region (closed tickets)</h3></div><canvas id="ch-region-tat"></canvas></div>
       </div>
       <div class="card">
         <div class="card-head"><h3>Region Summary (click row to drill)</h3><button class="btn-mini export-agg" data-agg="region">CSV</button></div>
@@ -143,7 +143,7 @@
         <div class="card"><div class="card-head"><h3>Open Tickets by Issue Category — bottlenecks</h3></div><canvas id="ch-opencat"></canvas></div>
       </div>
       <div class="grid-2">
-        <div class="card"><div class="card-head"><h3>Avg Resolution Days by Issue Category (slowest first)</h3></div><canvas id="ch-cat-tat"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Out-of-TAT % by Issue Category (worst first)</h3></div><canvas id="ch-cat-tat"></canvas></div>
         <div class="card"><div class="card-head"><h3>Open Tickets Stuck by Stage &amp; Ageing</h3><button class="btn-mini export-agg" data-agg="stuck">CSV</button></div>
           <div class="table-wrap"><table id="tbl-stuck" class="data-table clickable"></table></div></div>
       </div>
@@ -161,7 +161,7 @@
       </div>
       <div class="grid-2">
         <div class="card"><div class="card-head"><h3>TAT Compliance by Quarter (closed tickets)</h3></div><canvas id="ch-tat-comp"></canvas><p class="chart-note hidden" id="note-tat-comp">Excluding year 2025 tickets closed without rectification date</p></div>
-        <div class="card"><div class="card-head"><h3>Avg TAT Trend by Quarter (days)</h3></div><canvas id="ch-tat-trend"></canvas><p class="chart-note hidden" id="note-tat-trend">Excluding year 2025 tickets closed without rectification date</p></div>
+        <div class="card"><div class="card-head"><h3>In-TAT % Trend by Quarter</h3></div><canvas id="ch-tat-trend"></canvas><p class="chart-note hidden" id="note-tat-trend">Excluding year 2025 tickets closed without rectification date</p></div>
       </div>
       <div class="card">
         <div class="card-head"><h3>Open Ticket Ageing Detail (click row to drill)</h3><button class="btn-mini export-agg" data-agg="openAgeing">CSV</button></div>
