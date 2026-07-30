@@ -232,7 +232,7 @@
       <div id="upload-main">
       <div class="card">
         <div class="card-head"><h3>Upload Daily Report</h3></div>
-        <p class="muted">Upload the full cumulative Excel (same format as the “Details Sheet”). The parser validates the file and shows what will change <b>before</b> anything is written to the database. If a “Total Store Covered” sheet is present, the store master is refreshed from it too.</p>
+        <p class="muted">Upload the daily ASUS Maintenance Tracker Excel (Non Logo / Logo / POSM Case sheets — imports as <b>Live</b> data; the store master refreshes from the Master WOD sheet). A historical “Details Sheet” file imports as protected <b>Historical: 2025</b> data. The format is detected automatically, and the parser validates everything and shows what will change <b>before</b> anything is written to the database. Protected historical tickets are never modified.</p>
         <div id="dropzone" class="dropzone">
           <input type="file" id="file-input" accept=".xlsx,.xls" hidden>
           <div class="dz-inner">Drag &amp; drop the Excel file here<br><span class="muted">or</span><br><button class="btn btn-primary" id="browse-btn" type="button">Browse file</button></div>
