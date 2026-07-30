@@ -47,6 +47,8 @@
     <button class="tab" data-tab="stores">Stores &amp; Cities</button>
     <button class="tab" data-tab="issues">Issues &amp; Bottlenecks</button>
     <button class="tab" data-tab="ageing">Ageing &amp; TAT</button>
+    <button class="tab" data-tab="budget">Budget &amp; Approvals</button>
+    <button class="tab" data-tab="logo">Logo Logistics</button>
     <button class="tab" data-tab="explorer">Data Explorer</button>
     <button class="tab tab-upload hidden" data-tab="upload" id="upload-tab-btn">Upload Data</button>
   </nav>
@@ -54,6 +56,7 @@
 
   <!-- ============ GLOBAL FILTER BAR ============ -->
   <div class="filterbar" id="filterbar">
+    <div class="filter-group"><label>Data Source</label><select id="f-source"></select></div>
     <div class="filter-group"><label>Year</label><select id="f-year"></select></div>
     <div class="filter-group"><label>Quarter</label><select id="f-quarter"></select></div>
     <div class="filter-group"><label>Region</label><select id="f-region"></select></div>
@@ -163,6 +166,42 @@
         <div class="card-head"><h3>Open Ticket Ageing Detail (click row to drill)</h3><button class="btn-mini export-agg" data-agg="openAgeing">CSV</button></div>
         <div class="table-wrap"><table id="tbl-open-ageing" class="data-table clickable"></table></div>
       </div>
+    </section>
+
+    <!-- ============ BUDGET & APPROVALS ============ -->
+    <section class="view hidden" id="view-budget">
+      <div class="kpi-grid" id="budget-kpis"></div>
+      <div class="grid-2">
+        <div class="card"><div class="card-head"><h3>Spend by Budget Category (click to drill)</h3><button class="btn-mini export-agg" data-agg="spendCat">CSV</button></div><canvas id="ch-spend-cat"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Spend by Region</h3><button class="btn-mini export-agg" data-agg="spendRegion">CSV</button></div><canvas id="ch-spend-region"></canvas></div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><div class="card-head"><h3>Spend by Quarter</h3><button class="btn-mini export-agg" data-agg="spendQuarter">CSV</button></div><canvas id="ch-spend-quarter"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Approval Days Distribution</h3></div><canvas id="ch-approval-buckets"></canvas></div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><div class="card-head"><h3>Avg Approval Days by Region</h3></div><canvas id="ch-approval-region"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Avg Cost per Ticket by Category</h3></div><canvas id="ch-cost-per-ticket"></canvas></div>
+      </div>
+      <p class="muted" id="budget-note"></p>
+    </section>
+
+    <!-- ============ LOGO LOGISTICS ============ -->
+    <section class="view hidden" id="view-logo">
+      <div class="kpi-grid" id="logo-kpis"></div>
+      <div class="grid-2">
+        <div class="card"><div class="card-head"><h3>Logo Delivery Status (click to drill)</h3><button class="btn-mini export-agg" data-agg="logoStatus">CSV</button></div><canvas id="ch-logo-status"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Courier Partner Split</h3></div><canvas id="ch-logo-courier"></canvas></div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><div class="card-head"><h3>Logo Vendor Split</h3></div><canvas id="ch-logo-vendor"></canvas></div>
+        <div class="card"><div class="card-head"><h3>Dispatch → Delivery Days</h3></div><canvas id="ch-logo-transit"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Logo Cases Detail (click row for full ticket)</h3><button class="btn-mini export-agg" data-agg="logoDetail">CSV</button></div>
+        <div class="table-wrap tall"><table id="tbl-logo" class="data-table clickable"></table></div>
+      </div>
+      <p class="muted" id="logo-note"></p>
     </section>
 
     <!-- ============ DATA EXPLORER ============ -->

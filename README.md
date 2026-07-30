@@ -28,9 +28,10 @@ Supabase ── Postgres (tickets, stores, upload_logs, profiles)
 5. *(Optional, for file backups)* **Storage → New bucket** named `raw-uploads` (private),
    and add INSERT policy for authenticated users. Skip freely — uploads work without it.
 
-### 2. Credentials
-Open `js/config.js` and paste your **Project URL** and **anon public key**
-(Supabase → Project Settings → API). The anon key is safe in a public repo;
+### 2. Credentials — ✅ already done
+`js/config.js` already contains this project's URL and publishable (anon) key.
+Only if you ever move to a different Supabase project: replace them there
+(Supabase → Project Settings → API). This key is safe in a public repo;
 data access is controlled by login + Row Level Security.
 
 ### 3. GitHub Pages
@@ -42,8 +43,16 @@ data access is controlled by login + Row Level Security.
 Sign in → **Upload Data** tab → drop the cumulative Excel file → review the
 validation report → **Confirm & Upload**.
 
+## Data model (July 2026 onward)
+Two upload formats, auto-detected:
+
+- **Historical file** ("Details Sheet" format, e.g. *Asus - 2025 Data.xlsx*) → imports as **Historical: 2025**, permanently frozen. A database trigger blocks any update/delete of these rows; daily uploads skip them automatically.
+- **Daily tracker** (*ASUS Maintenance Tracker* format: Non Logo / Logo / POSM Case sheets + Master WOD store master) → imports as **Live**. Quarters, years, half-years, ageing buckets and the Logo/Non-Logo flag are derived automatically; the store master refreshes from Master WOD.
+
+A **Data Source** filter (All / Historical: 2025 / Live) applies across every view and export. Run `supabase/migration-historical-2025.sql` once before first use — it clears old data, adds the freeze protection, and locks anonymous access.
+
 ## Daily workflow
-Upload the latest cumulative file. The parser:
+Upload the latest tracker file. The parser:
 
 1. Locates the "Details Sheet" (and "Total Store Covered" sheet if present — refreshes the store master from it automatically).
 2. Validates before writing anything: missing required columns block the upload; row errors (missing Ticket ID / Region / dates, duplicate Ticket IDs) are listed and those rows skipped; warnings (inconsistent casing like "Rectified By RV" → auto-normalized, closed tickets without rectification date, unknown values) are listed but don't block.
