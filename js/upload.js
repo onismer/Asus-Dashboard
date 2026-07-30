@@ -47,41 +47,86 @@ const Upload = (() => {
       // cellDates:false → dates arrive as Excel serial numbers; mapping.js
       // converts them exactly (avoids SheetJS timezone off-by-one issues)
       const wb = XLSX.read(buf, { cellDates: false });
-      const { details, stores } = findSheets(wb.SheetNames);
-      if (!details) throw new Error(`No "Details Sheet" found. Sheets in file: ${wb.SheetNames.join(", ")}`);
-
-      const raw = XLSX.utils.sheet_to_json(wb.Sheets[details], { defval: null, raw: true });
-      if (!raw.length) throw new Error("Details Sheet has no data rows.");
-      const headers = Object.keys(raw[0]);
-      const lookup = buildHeaderLookup(headers);
-      if (lookup.missing.length)
-        throw new Error("Required column(s) missing in Details Sheet: " + lookup.missing.join(", "));
+      const det = detectWorkbook(wb.SheetNames);
+      if (!det.format)
+        throw new Error(`Unrecognised file. Expected either a "Details Sheet" (historical format) or "Non Logo Case / Logo Case / POSM Case" sheets (daily tracker). Sheets found: ${wb.SheetNames.join(", ")}`);
 
       progress("parse-bar", "parse-msg", .55, "Validating rows…");
       const rows = [], errors = [], warnings = [], seenIds = new Map();
-      raw.forEach((r, i) => {
-        const excelRow = i + 2;
-        // skip fully empty rows
-        if (Object.values(r).every(v => v == null || String(v).trim() === "")) return;
-        const { row, warnings: w, errors: e } = parseTicketRow(r, lookup);
-        if (e.length) { errors.push(`Row ${excelRow}: ${e.join("; ")}`); return; }
+      const extrasInfo = [];
+
+      const takeRow = (row, w, e, excelRow, sheetLabel) => {
+        const where = sheetLabel ? `${sheetLabel} row ${excelRow}` : `Row ${excelRow}`;
+        if (e.length) { errors.push(`${where}: ${e.join("; ")}`); return; }
         if (seenIds.has(row.ticket_id)) {
-          errors.push(`Row ${excelRow}: duplicate Ticket ID ${row.ticket_id} (first seen at row ${seenIds.get(row.ticket_id)}) — later row skipped`);
+          errors.push(`${where}: duplicate Ticket ID ${row.ticket_id} (first seen at ${seenIds.get(row.ticket_id)}) — later row skipped`);
           return;
         }
-        seenIds.set(row.ticket_id, excelRow);
-        w.forEach(msg => warnings.push(`Row ${excelRow} (T-${row.ticket_id}): ${msg}`));
+        seenIds.set(row.ticket_id, where);
+        w.forEach(msg => warnings.push(`${where} (T-${row.ticket_id}): ${msg}`));
         rows.push(row);
-      });
+      };
 
-      let storeCodes = [];
-      if (stores) storeCodes = parseStoreSheet(XLSX.utils.sheet_to_json(wb.Sheets[stores], { header: 1, defval: null }));
+      let storeRows = [];   // objects for the stores table
+
+      if (det.format === "legacy") {
+        // ---- HISTORICAL FILE (imports as protected "Historical: 2025") ----
+        const raw = XLSX.utils.sheet_to_json(wb.Sheets[det.details], { defval: null, raw: true });
+        if (!raw.length) throw new Error("Details Sheet has no data rows.");
+        const lookup = buildHeaderLookup(Object.keys(raw[0]));
+        if (lookup.missing.length)
+          throw new Error("Required column(s) missing in Details Sheet: " + lookup.missing.join(", "));
+        if (lookup.extras.length) extrasInfo.push(`${lookup.extras.length} unmapped column(s) preserved: ${lookup.extras.slice(0, 8).join(", ")}${lookup.extras.length > 8 ? "…" : ""}`);
+        raw.forEach((r, i) => {
+          if (Object.values(r).every(v => v == null || String(v).trim() === "")) return;
+          const { row, warnings: w, errors: e } = parseTicketRow(r, lookup);
+          if (!e.length) { deriveFields(row, null); row.data_source = "Historical: 2025"; row.frozen = true; }
+          takeRow(row, w, e, i + 2, null);
+        });
+        if (det.stores) storeRows = parseStoreSheet(XLSX.utils.sheet_to_json(wb.Sheets[det.stores], { header: 1, defval: null }))
+          .map(c => ({ store_code: c }));
+      } else {
+        // ---- DAILY TRACKER (imports as "Live") ----
+        for (const sheetName of det.cases) {
+          const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: null, raw: true });
+          const hr = findHeaderRow(aoa, "ticket id");
+          if (hr < 0) { warnings.push(`Sheet "${sheetName}": could not find a header row with "Ticket ID" — sheet skipped`); continue; }
+          const headers = aoa[hr].map(h => h == null ? "" : String(h));
+          const lookup = buildTrackerLookup(headers);
+          if (lookup.missing.length) {
+            errors.push(`Sheet "${sheetName}": required column(s) missing: ${lookup.missing.join(", ")} — sheet skipped`);
+            continue;
+          }
+          const logoFlag = /^non\s*logo/i.test(sheetName.trim()) ? "Non Logo" : /^logo/i.test(sheetName.trim()) ? "Logo" : "Non Logo";
+          for (let i = hr + 1; i < aoa.length; i++) {
+            const arr = aoa[i] || [];
+            const obj = {};
+            headers.forEach((h, j) => { if (h) obj[h] = arr[j] ?? null; });
+            const { row, warnings: w, errors: e } = parseTicketRow(obj, lookup);
+            // tracker sheets carry formula-filled blank rows → skip silently when
+            // there is no ticket id AND no store name
+            if (row.ticket_id == null && !row.store_name) continue;
+            if (!e.length) { deriveFields(row, logoFlag); row.data_source = "Live"; row.frozen = false; }
+            takeRow(row, w, e, i + 1, sheetName);
+          }
+        }
+        if (!rows.length && !errors.length) throw new Error("No ticket rows found in the tracker's case sheets.");
+        if (det.masterWod)
+          storeRows = parseMasterWod(XLSX.utils.sheet_to_json(wb.Sheets[det.masterWod], { header: 1, defval: null, raw: true }));
+      }
 
       progress("parse-bar", "parse-msg", .8, "Comparing with database…");
       const diff = computeDiff(rows);
-      pending = { rows, storeCodes, fileName: file.name, asOn: asOnFromFilename(file.name), warnings, errors, diff, file };
+      // "as on" date: from filename, else latest activity date in the file
+      let asOn = asOnFromFilename(file.name);
+      if (!asOn) {
+        const ds = rows.flatMap(r => [r.issue_raised_date, r.rectification_date]).filter(Boolean).sort();
+        asOn = ds.length ? ds[ds.length - 1] : null;
+      }
+      pending = { rows: diff.importRows, storeCodes: storeRows, fileName: file.name, asOn,
+        warnings, errors, diff, file, format: det.format, extrasInfo };
       progress("parse-bar", "parse-msg", 1, "Done");
-      showValidation(lookup);
+      showValidation();
     } catch (e) {
       $("parse-progress").classList.add("hidden");
       A().toast("Error: " + e.message, 6000);
@@ -91,40 +136,46 @@ const Upload = (() => {
   function computeDiff(rows) {
     const existing = new Map(A().S.tickets.map(t => [t.ticket_id, t]));
     const fileIds = new Set(rows.map(r => r.ticket_id));
-    let added = 0, updated = 0, unchanged = 0;
+    let added = 0, updated = 0, unchanged = 0, frozenSkipped = 0;
+    const importRows = [];
     const compareKeys = ["region","branch","store_name","city","issue_raised_date","issue_category",
-      "budget_category","status","final_status","rectification_date","responsibility","tat_follow","rectification_time"];
+      "budget_category","status","final_status","rectification_date","responsibility","tat_follow",
+      "rectification_time","total_budget","approval_days","logo_delivery_status","logo_delivery_date"];
     for (const r of rows) {
       const ex = existing.get(r.ticket_id);
-      if (!ex) { added++; continue; }
+      if (ex && ex.frozen) { frozenSkipped++; continue; }   // protected historical rows are never touched
+      if (!ex) { added++; importRows.push(r); continue; }
       const changed = compareKeys.some(k => String(ex[k] ?? "") !== String(r[k] ?? ""));
-      changed ? updated++ : unchanged++;
+      if (changed) { updated++; importRows.push(r); } else { unchanged++; importRows.push(r); }
     }
-    const missing = [...existing.keys()].filter(id => !fileIds.has(id));
-    return { added, updated, unchanged, missing };
+    // deletable = DB tickets absent from the file, EXCLUDING protected historical rows
+    const missing = [...existing.values()].filter(t => !t.frozen && !fileIds.has(t.ticket_id)).map(t => t.ticket_id);
+    return { added, updated, unchanged, missing, frozenSkipped, importRows };
   }
 
-  function showValidation(lookup) {
-    const { rows, storeCodes, fileName, asOn, warnings, errors, diff } = pending;
+  function showValidation() {
+    const { rows, storeCodes, fileName, asOn, warnings, errors, diff, format, extrasInfo } = pending;
     $("validation-card").classList.remove("hidden");
-    $("val-filename").textContent = fileName + (asOn ? ` (as on ${A().fmtDate(asOn)})` : "");
+    const fmtLabel = format === "legacy" ? "HISTORICAL file — imports as protected “Historical: 2025”"
+                                         : "DAILY TRACKER — imports as “Live”";
+    $("val-filename").textContent = `${fileName}${asOn ? ` (as on ${A().fmtDate(asOn)})` : ""} — ${fmtLabel}`;
 
     const stats = [
-      ["ok",   rows.length, "valid ticket rows"],
+      ["ok",   rows.length, "rows to import"],
       ["ok",   diff.added, "new tickets"],
       ["warn", diff.updated, "tickets will be updated"],
       ["",     diff.unchanged, "unchanged"],
+      ["",     diff.frozenSkipped, "protected historical rows (skipped)"],
       ["err",  errors.length, "rows with errors (skipped)"],
       ["warn", warnings.length, "warnings"],
-      ["",     storeCodes.length, "store codes in master sheet"],
-      ["warn", diff.missing.length, "in DB but not in file"],
+      ["",     storeCodes.length, "stores in master sheet"],
+      ["warn", diff.missing.length, "live tickets in DB but not in file"],
     ];
     $("val-summary").innerHTML = stats.map(([cls, n, label]) =>
       `<div class="val-stat ${cls}"><b>${Number(n).toLocaleString("en-IN")}</b>${label}</div>`).join("");
 
     fillList("val-errors", "val-errors-box", errors);
-    const extraCols = lookup.extras.length ? [`Info: ${lookup.extras.length} unmapped column(s) preserved in "extra": ${lookup.extras.slice(0, 8).join(", ")}${lookup.extras.length > 8 ? "…" : ""}`] : [];
-    fillList("val-warnings", "val-warnings-box", dedupeWarnings(warnings).concat(extraCols));
+    fillList("val-warnings", "val-warnings-box", dedupeWarnings(warnings).concat((extrasInfo || []).map(s => "Info: " + s)));
 
     // preview
     const prevCols = ["ticket_id","region","branch","store_name","city","issue_raised_date","issue_category","budget_category","status","final_status","rectification_date","responsibility"];
@@ -193,7 +244,7 @@ const Upload = (() => {
         const { error: delErr } = await sb.from("stores").delete().neq("store_code", "");
         if (delErr) throw new Error("Store master clear failed: " + delErr.message);
         for (let i = 0; i < storeCodes.length; i += 500) {
-          const { error } = await sb.from("stores").insert(storeCodes.slice(i, i + 500).map(c => ({ store_code: c })));
+          const { error } = await sb.from("stores").insert(storeCodes.slice(i, i + 500));
           if (error) throw new Error("Store master insert failed: " + error.message);
         }
       }
@@ -211,7 +262,9 @@ const Upload = (() => {
         uploaded_by: A().S.session.user.email, file_name: fileName, as_on_date: asOn,
         total_rows: rows.length, inserted_rows: diff.added, updated_rows: diff.updated,
         deleted_rows: deleted, store_count: storeCodes.length || null,
-        warnings: warnings.length, note,
+        warnings: warnings.length,
+        note: [pending.format === "legacy" ? "historical import (frozen)" : "daily tracker (live)",
+               diff.frozenSkipped ? diff.frozenSkipped + " frozen rows skipped" : "", note].filter(Boolean).join("; "),
       });
       progress("commit-bar", "commit-msg", 1, "Done — refreshing dashboard…");
       A().toast(`Upload complete: ${diff.added} new, ${diff.updated} updated${deleted ? ", " + deleted + " deleted" : ""}`, 5000);

@@ -46,7 +46,71 @@ const HEADER_MAP = {
   "tat follow":                      "tat_follow",
   "material deployed":               "material_deployed",
   "qty":                             "qty",
+  // legacy logo/budget columns (present in the 2025 historical file)
+  "logo delivery status":            "logo_delivery_status",
+  "logo vendor name":                "logo_vendor",
+  "curiour partner":                 "logo_courier",
+  "courier partner":                 "logo_courier",
+  "mail received date":              "logo_dispatch_date",
+  "delivery date":                   "logo_delivery_date",
+  "total amount":                    "total_budget",
 };
+// legacy "Approval Tat" = days to approve → unified approval_days
+HEADER_MAP["approval tat"] = "approval_days";
+
+/* ---- NEW TRACKER FORMAT (Non Logo Case / Logo Case / POSM Case sheets) ---- */
+const TRACKER_HEADER_MAP = {
+  "ticket id":                          "ticket_id",
+  "new ticket no.":                     "new_ticket_no",
+  "unique cp store code":               "store_code",
+  "store name":                         "store_name",
+  "address":                            "address",
+  "city":                               "city",
+  "state":                              "state",
+  "state code":                         "state_code",
+  "region":                             "region",
+  "branch":                             "branch",
+  "store type as per asus":             "store_type",
+  "issue raised by":                    "issue_raised_by",
+  "designation":                        "designation",
+  "cmkt name":                          "cmkt_name",
+  "city classification":                "city_classification",
+  "issue raised date":                  "issue_raised_date",
+  "issue reported by creater":          "problem_reported",
+  "issue category":                     "issue_category",
+  "issue macro category":               "macro_category",
+  "budget category":                    "budget_category",
+  "issue type":                         "issue_type",
+  "responcibility":                     "responsibility",   // (typo in source file)
+  "responsibility":                     "responsibility",
+  "ticket status":                      "status",
+  "final ticket status":                "final_status",
+  "approval date":                      "approval_date",
+  "cmkt approval days":                 "approval_days",
+  "approved closer tat days":           "tat_city_type",    // allowed TAT days
+  "rectification date":                 "rectification_date",
+  "ticket closer tat days":             "rectification_time",
+  "ticket closer tat":                  "tat_follow",
+  "asset installation date":            "asset_installation_date",
+  "total budget":                       "total_budget",
+  // logo logistics (Logo Case sheet)
+  "logo delivery status":               "logo_delivery_status",
+  "courier partner name":               "logo_courier",
+  "logo vendor name":                   "logo_vendor",
+  "dispatch details mail received date":"logo_dispatch_date",
+  "delivery date":                      "logo_delivery_date",
+};
+const TRACKER_IGNORED = new Set([
+  "sl. no.", "month", "approval month", "rectification month",
+  "approval days bucket", "ageing as per creation", "ageing as per approval",
+  "ageing bucket as per creation", "ageing bucket as per approval",
+  "ageing bucket as per delivery date", "region wise closer formula",
+  "ageing wise closer count formula", "ageing wise closer count formula 02",
+]);
+const TRACKER_REQUIRED = [
+  "ticket id", "region", "store name", "city", "issue raised date",
+  "issue category", "budget category", "ticket status", "final ticket status",
+];
 
 // Columns that must exist in the uploaded sheet (blocking error if missing)
 const REQUIRED_HEADERS = [
@@ -65,8 +129,9 @@ const IGNORED_HEADERS = new Set([
 const DATE_FIELDS = new Set([
   "asset_installation_date", "issue_raised_date", "approval_date",
   "execution_tentative_date", "rectification_date",
+  "logo_dispatch_date", "logo_delivery_date",
 ]);
-const NUM_FIELDS  = new Set(["approval_tat", "tat_city_type", "rectification_time"]);
+const NUM_FIELDS  = new Set(["approval_days", "tat_city_type", "rectification_time", "total_budget"]);
 const INT_FIELDS  = new Set(["issue_raised_year", "rectified_year"]);
 
 // ---------- value normalization (fixes inconsistent casing in source) ----------
@@ -202,27 +267,97 @@ function parseTicketRow(raw, headerLookup) {
   return { row, warnings, errors };
 }
 
-/** Build header lookup from the sheet's first row headers. */
-function buildHeaderLookup(headers) {
+/** Generic header lookup builder. */
+function buildLookup(headers, map, required, ignored) {
   const mapped = [], extras = [], missing = [];
   const seen = new Set();
   for (const h of headers) {
     const n = normHeader(h);
-    if (!n || IGNORED_HEADERS.has(n)) continue;
-    if (HEADER_MAP[n] && !seen.has(HEADER_MAP[n])) { mapped.push([h, HEADER_MAP[n]]); seen.add(HEADER_MAP[n]); }
-    else if (!HEADER_MAP[n]) extras.push(h);
+    if (!n || ignored.has(n)) continue;
+    if (map[n] && !seen.has(map[n])) { mapped.push([h, map[n]]); seen.add(map[n]); }
+    else if (!map[n]) extras.push(h);
   }
-  for (const req of REQUIRED_HEADERS) {
+  for (const req of required) {
     if (!headers.some(h => normHeader(h) === req)) missing.push(req);
   }
   return { mapped, extras, missing };
 }
+function buildHeaderLookup(headers)        { return buildLookup(headers, HEADER_MAP, REQUIRED_HEADERS, IGNORED_HEADERS); }
+function buildTrackerLookup(headers)       { return buildLookup(headers, TRACKER_HEADER_MAP, TRACKER_REQUIRED, TRACKER_IGNORED); }
 
-/** Locate the tickets sheet & store sheet by fuzzy name. */
+/**
+ * Detect workbook format.
+ *  - 'legacy'  → old dashboard extract / historical 2025 file ("Details Sheet")
+ *  - 'tracker' → new maintenance tracker (Non Logo / Logo / POSM Case sheets)
+ */
+function detectWorkbook(sheetNames) {
+  const details  = sheetNames.find(n => /details/i.test(n)) || null;
+  const stores   = sheetNames.find(n => /total\s*store/i.test(n)) || null;
+  const cases    = sheetNames.filter(n => /^(non\s*logo|logo|posm)\s*case/i.test(n.trim()));
+  const masterWod= sheetNames.find(n => /master\s*wod/i.test(n)) || null;
+  if (details) return { format: "legacy", details, stores, cases: [], masterWod: null };
+  if (cases.length) return { format: "tracker", details: null, stores: null, cases, masterWod };
+  return { format: null, details: null, stores: null, cases: [], masterWod: null };
+}
+
+/** In an array-of-arrays sheet, find the real header row (tracker sheets have
+    a meta row on top). Looks for a row containing "Ticket ID" / "Unique CP Store Code". */
+function findHeaderRow(aoa, mustContain) {
+  for (let i = 0; i < Math.min(aoa.length, 8); i++) {
+    if ((aoa[i] || []).some(c => normHeader(c) === mustContain)) return i;
+  }
+  return -1;
+}
+
+/** Derive dashboard fields the tracker file doesn't carry (quarters, years,
+    half-year, closure ageing bucket, logo flag). Safe to call on any row. */
+function deriveFields(row, logoFlag) {
+  const q = d => d ? "Q" + (Math.floor((Number(d.slice(5, 7)) - 1) / 3) + 1) + " " + d.slice(0, 4) : null;
+  if (row.issue_raised_year == null && row.issue_raised_date) row.issue_raised_year = Number(row.issue_raised_date.slice(0, 4));
+  if (!row.quarter_raised    && row.issue_raised_date)  row.quarter_raised    = q(row.issue_raised_date);
+  if (!row.quarter_rectified && row.rectification_date) row.quarter_rectified = q(row.rectification_date);
+  if (!row.half_yearly && row.issue_raised_date)
+    row.half_yearly = (Number(row.issue_raised_date.slice(5, 7)) <= 6 ? "HY1" : "HY2") + " (" + row.issue_raised_date.slice(0, 4) + ")";
+  if (row.rectified_year == null && row.rectification_date) row.rectified_year = Number(row.rectification_date.slice(0, 4));
+  if (!row.ageing_closure_bucket && row.final_status === "Closed" && row.rectification_time != null) {
+    const d = row.rectification_time;
+    row.ageing_closure_bucket = d <= 30 ? "00 to 30 Days" : d <= 60 ? "30 to 60 Days" : d <= 90 ? "60 to 90 Days" : d <= 120 ? "90 to 120 Days" : "Above 120 Days";
+  }
+  if (!row.logo_flag && logoFlag) row.logo_flag = logoFlag;
+  return row;
+}
+
+/** Parse the tracker's "Master WOD" sheet (array-of-arrays) → store master rows. */
+function parseMasterWod(aoa) {
+  const hr = findHeaderRow(aoa, "unique cp store code");
+  if (hr < 0) return [];
+  const heads = (aoa[hr] || []).map(normHeader);
+  const col = name => heads.indexOf(name);
+  const ix = {
+    code: col("unique cp store code"), name: col("store name"),
+    city: col("city name"), state: col("state name"), branch: col("branch"),
+    territory: col("territory name"), district: col("district"), tm: col("tm name"),
+  };
+  const out = new Map();
+  for (let i = hr + 1; i < aoa.length; i++) {
+    const r = aoa[i] || [];
+    const code = cleanStr(r[ix.code]);
+    if (!code || !/^CP\d+$/i.test(code)) continue;
+    out.set(code.toUpperCase(), {
+      store_code: code.toUpperCase(),
+      store_name: cleanStr(r[ix.name]), city: cleanStr(r[ix.city]),
+      state: cleanStr(r[ix.state]), branch: cleanStr(r[ix.branch]),
+      territory: cleanStr(r[ix.territory]), district: cleanStr(r[ix.district]),
+      tm_name: cleanStr(r[ix.tm]),
+    });
+  }
+  return [...out.values()];
+}
+
+/** Back-compat alias. */
 function findSheets(sheetNames) {
-  const details = sheetNames.find(n => /details/i.test(n)) || null;
-  const stores  = sheetNames.find(n => /total\s*store/i.test(n)) || null;
-  return { details, stores };
+  const d = detectWorkbook(sheetNames);
+  return { details: d.details, stores: d.stores };
 }
 
 /** Extract "as on" date from a file name like "... As On 13-07-2026.xlsx" */
@@ -252,6 +387,8 @@ function parseStoreSheet(aoa) {
 
 // Node export for testing
 if (typeof module !== "undefined") {
-  module.exports = { HEADER_MAP, REQUIRED_HEADERS, buildHeaderLookup, parseTicketRow,
-    findSheets, asOnFromFilename, parseStoreSheet, parseDate, parseNum, normHeader };
+  module.exports = { HEADER_MAP, TRACKER_HEADER_MAP, REQUIRED_HEADERS, TRACKER_REQUIRED,
+    buildHeaderLookup, buildTrackerLookup, parseTicketRow, detectWorkbook, findHeaderRow,
+    deriveFields, parseMasterWod, findSheets, asOnFromFilename, parseStoreSheet,
+    parseDate, parseNum, normHeader };
 }

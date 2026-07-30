@@ -14,6 +14,7 @@ const S = {
 };
 
 const FILTER_DEFS = [
+  ["f-source", "source", t => t.data_source],
   ["f-year",   "year",   t => t.issue_raised_year],
   ["f-quarter","quarter",t => t.quarter_raised],
   ["f-region", "region", t => t.region],
@@ -25,7 +26,7 @@ const FILTER_DEFS = [
   ["f-resp",   "resp",   t => t.responsibility],
   ["f-logo",   "logo",   t => t.logo_flag],
 ];
-const F = { year:"", quarter:"", region:"", branch:"", tier:"", budget:"", status:"", final:"", resp:"", logo:"", search:"" };
+const F = { source:"", year:"", quarter:"", region:"", branch:"", tier:"", budget:"", status:"", final:"", resp:"", logo:"", search:"" };
 
 const $ = id => document.getElementById(id);
 const fmt = n => n == null ? "-" : Number(n).toLocaleString("en-IN");
@@ -128,7 +129,7 @@ function clearFilters() {
 
 function renderChips() {
   const box = $("active-filters"); box.innerHTML = "";
-  const labels = { year:"Year", quarter:"Quarter", region:"Region", branch:"Branch", tier:"Tier", budget:"Budget", status:"Stage", final:"Status", resp:"Resp.", logo:"Logo", search:"Search" };
+  const labels = { source:"Source", year:"Year", quarter:"Quarter", region:"Region", branch:"Branch", tier:"Tier", budget:"Budget", status:"Stage", final:"Status", resp:"Resp.", logo:"Logo", search:"Search" };
   Object.entries(F).forEach(([k, v]) => {
     if (!v) return;
     const chip = document.createElement("span");
@@ -140,6 +141,7 @@ function renderChips() {
 
 function getFiltered() {
   return S.tickets.filter(t =>
+    (!F.source  || t.data_source === F.source) &&
     (!F.year    || String(t.issue_raised_year) === F.year) &&
     (!F.quarter || t.quarter_raised === F.quarter) &&
     (!F.region  || t.region === F.region) &&
@@ -235,6 +237,8 @@ function renderActive(force) {
   else if (t === "stores") renderStores();
   else if (t === "issues") renderIssues();
   else if (t === "ageing") renderAgeing();
+  else if (t === "budget") renderBudget();
+  else if (t === "logo") renderLogo();
   else if (t === "explorer") renderExplorer();
   if (t !== "upload") S.dirty = false;
 }
@@ -604,10 +608,124 @@ function renderAgeing() {
 }
 
 // ============================================================
+// BUDGET & APPROVALS
+// ============================================================
+const fmtINR = n => n == null || isNaN(n) ? "-" : "₹" + Math.round(n).toLocaleString("en-IN");
+
+function renderBudget() {
+  const rows = getFiltered();
+  const withBudget = rows.filter(r => r.total_budget != null && r.total_budget > 0);
+  const withAppr = rows.filter(r => r.approval_days != null);
+  const totalSpend = withBudget.reduce((a, r) => a + Number(r.total_budget), 0);
+
+  $("budget-kpis").innerHTML = [
+    ["Total Spend", fmtINR(totalSpend), fmt(withBudget.length) + " tickets with budget data"],
+    ["Avg Cost / Ticket", fmtINR(withBudget.length ? totalSpend / withBudget.length : null), "where budget known"],
+    ["Avg Approval Days", fmt1(avg(withAppr, r => r.approval_days)), fmt(withAppr.length) + " tickets with approval data"],
+    ["Approved in ≤3 Days", fmt(withAppr.filter(r => r.approval_days <= 3).length), pct(withAppr.filter(r => r.approval_days <= 3).length, withAppr.length) + " of approvals"],
+    ["Rejected Tickets", fmt(rows.filter(r => r.status === "Rejected").length), "click Stage filter to inspect"],
+  ].map(([l, v, sub]) => `<div class="kpi"><div class="kpi-label">${l}</div><div class="kpi-value">${v}</div><div class="kpi-sub">${sub || ""}</div></div>`).join("");
+
+  const spendBy = keyFn => [...groupBy(withBudget, keyFn).entries()]
+    .map(([k, v]) => [k, v.reduce((a, r) => a + Number(r.total_budget), 0), v.length])
+    .sort((a, b) => b[1] - a[1]);
+
+  const byCat = spendBy(r => r.budget_category);
+  S.agg.spendCat = { headers: ["Budget Category","Spend","Tickets"], rows: byCat.map(x => [x[0], Math.round(x[1]), x[2]]) };
+  makeChart("ch-spend-cat", { type: "bar",
+    data: { labels: byCat.map(x => x[0]), datasets: [{ label: "Spend (₹)", data: byCat.map(x => Math.round(x[1])), backgroundColor: PALETTE[0] }] },
+    options: { plugins: { legend: { display: false } } } },
+    label => drill({ budget: label }, label));
+
+  const byReg = spendBy(r => r.region);
+  S.agg.spendRegion = { headers: ["Region","Spend","Tickets"], rows: byReg.map(x => [x[0], Math.round(x[1]), x[2]]) };
+  makeChart("ch-spend-region", { type: "bar",
+    data: { labels: byReg.map(x => x[0]), datasets: [{ label: "Spend (₹)", data: byReg.map(x => Math.round(x[1])), backgroundColor: PALETTE[1] }] },
+    options: { plugins: { legend: { display: false } } } },
+    label => drill({ region: label }, label));
+
+  const byQ = spendBy(r => r.quarter_raised).sort((a, b) => qKey(a[0]) - qKey(b[0]));
+  S.agg.spendQuarter = { headers: ["Quarter","Spend","Tickets"], rows: byQ.map(x => [x[0], Math.round(x[1]), x[2]]) };
+  makeChart("ch-spend-quarter", { type: "bar",
+    data: { labels: byQ.map(x => x[0]), datasets: [{ label: "Spend (₹)", data: byQ.map(x => Math.round(x[1])), backgroundColor: PALETTE[4] }] },
+    options: { plugins: { legend: { display: false } } } },
+    label => drill({ quarter: label }, label));
+
+  const buckets = [["0-1",0,1],["2-3",2,3],["4-7",4,7],["8-14",8,14],["15-30",15,30],["31+",31,1e9]];
+  makeChart("ch-approval-buckets", { type: "bar",
+    data: { labels: buckets.map(b => b[0] + " days"), datasets: [{ label: "Tickets", data: buckets.map(([, lo, hi]) => withAppr.filter(r => r.approval_days >= lo && r.approval_days <= hi).length), backgroundColor: PALETTE[2] }] },
+    options: { plugins: { legend: { display: false } } } });
+
+  const regs = [...groupBy(withAppr, r => r.region).entries()];
+  makeChart("ch-approval-region", { type: "bar",
+    data: { labels: regs.map(r => r[0]), datasets: [{ label: "Avg approval days", data: regs.map(([, v]) => avg(v, r => r.approval_days)), backgroundColor: PALETTE[3] }] },
+    options: { plugins: { legend: { display: false } } } });
+
+  makeChart("ch-cost-per-ticket", { type: "bar",
+    data: { labels: byCat.map(x => x[0]), datasets: [{ label: "Avg cost/ticket (₹)", data: byCat.map(x => Math.round(x[1] / x[2])), backgroundColor: PALETTE[5] }] },
+    options: { plugins: { legend: { display: false } } } });
+
+  $("budget-note").textContent = withBudget.length || withAppr.length ? "" :
+    "No budget/approval data in the current selection — these fields arrive with daily tracker uploads (Live data).";
+}
+
+// ============================================================
+// LOGO LOGISTICS
+// ============================================================
+function renderLogo() {
+  const rows = getFiltered().filter(r => r.logo_flag === "Logo" || r.logo_delivery_status || r.logo_delivery_date);
+  const delivered = rows.filter(r => r.logo_delivery_date || /deliver/i.test(r.logo_delivery_status || ""));
+  const transit = rows.filter(r => r.logo_dispatch_date && r.logo_delivery_date)
+    .map(r => (new Date(r.logo_delivery_date) - new Date(r.logo_dispatch_date)) / 86400000)
+    .filter(d => d >= 0 && d < 120);
+
+  $("logo-kpis").innerHTML = [
+    ["Logo Cases", fmt(rows.length), "in current selection"],
+    ["Delivered", fmt(delivered.length), pct(delivered.length, rows.length) + " of logo cases"],
+    ["Open Logo Cases", fmt(rows.filter(r => r.final_status === "Open").length), ""],
+    ["Avg Dispatch→Delivery", fmt1(transit.length ? transit.reduce((a, b) => a + b, 0) / transit.length : null) + " days", fmt(transit.length) + " with both dates"],
+  ].map(([l, v, sub]) => `<div class="kpi"><div class="kpi-label">${l}</div><div class="kpi-value">${v}</div><div class="kpi-sub">${sub || ""}</div></div>`).join("");
+
+  const stat2 = [...groupBy(rows.filter(r => r.logo_delivery_status), r => r.logo_delivery_status).entries()].sort((a, b) => b[1].length - a[1].length);
+  S.agg.logoStatus = { headers: ["Delivery Status","Tickets"], rows: stat2.map(([k, v]) => [k, v.length]) };
+  makeChart("ch-logo-status", { type: "bar",
+    data: { labels: stat2.map(s => s[0]), datasets: [{ label: "Tickets", data: stat2.map(s => s[1].length), backgroundColor: PALETTE[0] }] },
+    options: { indexAxis: "y", plugins: { legend: { display: false } } } },
+    label => drill({ logo: "Logo", search: "" }, label));
+
+  const cour = [...groupBy(rows.filter(r => r.logo_courier), r => r.logo_courier).entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 8);
+  makeChart("ch-logo-courier", { type: "doughnut",
+    data: { labels: cour.map(c => c[0]), datasets: [{ data: cour.map(c => c[1].length), backgroundColor: PALETTE }] } });
+
+  const vend = [...groupBy(rows.filter(r => r.logo_vendor), r => r.logo_vendor).entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 8);
+  makeChart("ch-logo-vendor", { type: "bar",
+    data: { labels: vend.map(v => v[0]), datasets: [{ label: "Tickets", data: vend.map(v => v[1].length), backgroundColor: PALETTE[1] }] },
+    options: { indexAxis: "y", plugins: { legend: { display: false } } } });
+
+  const tb = [["0-3",0,3],["4-7",4,7],["8-14",8,14],["15-30",15,30],["31+",31,1e9]];
+  makeChart("ch-logo-transit", { type: "bar",
+    data: { labels: tb.map(b => b[0] + " days"), datasets: [{ label: "Deliveries", data: tb.map(([, lo, hi]) => transit.filter(d => d >= lo && d <= hi).length), backgroundColor: PALETTE[2] }] },
+    options: { plugins: { legend: { display: false } } } });
+
+  const detail = rows.slice(0, 300);
+  S.agg.logoDetail = { headers: ["Ticket","Store","City","Status","Delivery Status","Courier","Vendor","Dispatched","Delivered"],
+    rows: detail.map(r => [r.ticket_id, r.store_name, r.city, r.final_status, r.logo_delivery_status, r.logo_courier, r.logo_vendor, r.logo_dispatch_date, r.logo_delivery_date]) };
+  renderTable("tbl-logo", S.agg.logoDetail.headers, detail.map(r => ({
+    cells: [esc(r.ticket_id), esc(r.store_name || "-"), esc(r.city || "-"),
+      `<span class="pill ${r.final_status === "Open" ? "open" : "closed"}">${esc(r.final_status || "-")}</span>`,
+      esc(r.logo_delivery_status || "-"), esc(r.logo_courier || "-"), esc(r.logo_vendor || "-"),
+      fmtDate(r.logo_dispatch_date), fmtDate(r.logo_delivery_date)],
+    onClick: () => openDrawer(r) })));
+
+  $("logo-note").textContent = rows.length ? "" :
+    "No logo cases in the current selection. Logistics fields (courier, AWB, delivery dates) arrive with daily tracker uploads.";
+}
+
+// ============================================================
 // DATA EXPLORER
 // ============================================================
 const EXPLORER_COLS = [
-  ["ticket_id","Ticket ID"],["issue_raised_date","Raised"],["region","Region"],["branch","Branch"],
+  ["ticket_id","Ticket ID"],["data_source","Source"],["issue_raised_date","Raised"],["region","Region"],["branch","Branch"],
   ["store_name","Store"],["city","City"],["city_classification","Tier"],["issue_category","Issue Category"],
   ["budget_category","Budget"],["status","Stage"],["final_status","Open/Closed"],["responsibility","Resp."],
   ["rectification_date","Rectified"],["rectification_time","TAT (days)"],["tat_follow","TAT Flag"],
@@ -625,7 +743,7 @@ function renderExplorer() {
       if (k.endsWith("_date")) return fmtDate(t[k]);
       return esc(t[k] == null ? "-" : t[k]);
     }),
-    numCols: [13], onClick: () => openDrawer(t) })));
+    numCols: [14], onClick: () => openDrawer(t) })));
 }
 
 function openDrawer(t) {
