@@ -82,6 +82,7 @@ async function loadData() {
     ]);
     S.storeCount = storeCount || 0;
     S.asOn = (lastUp && lastUp[0] && lastUp[0].as_on_date) || null;
+    updateSuggestBadge();
     $("as-on-badge").textContent = S.asOn ? "Data as on " + fmtDate(S.asOn) : (all.length ? "" : "No data yet — use Upload tab");
     buildFilterOptions();
     S.dirty = true; renderActive();
@@ -203,6 +204,8 @@ function bindUI() {
   $("drawer-close").onclick = closeDrawer;
   $("drawer-overlay").onclick = closeDrawer;
 
+  $("suggest-post").onclick = postSuggestion;
+
   // upload view sub-tabs (Upload File / Upload History)
   document.querySelectorAll(".subtab").forEach(b => b.onclick = () => {
     document.querySelectorAll(".subtab").forEach(x => x.classList.toggle("active", x === b));
@@ -239,6 +242,7 @@ function renderActive(force) {
   else if (t === "ageing") renderAgeing();
   else if (t === "budget") renderBudget();
   else if (t === "logo") renderLogo();
+  else if (t === "suggest") renderSuggest();
   else if (t === "explorer") renderExplorer();
   if (t !== "upload") S.dirty = false;
 }
@@ -350,10 +354,9 @@ function renderOverview() {
     { label: "Total Tickets", value: fmt(s.total), drill: {} },
     { label: "Closed", value: fmt(s.closed), cls: "k-ok", sub: pct(s.closed, s.total) + " closure", drill: { final: "Closed" } },
     { label: "Open", value: fmt(s.open), cls: "k-bad", drill: { final: "Open" } },
-    { label: "Avg TAT (days)", value: fmt1(s.avgTat), sub: "closed tickets" },
     { label: "In-TAT Closed", value: fmt(s.inTat), cls: "k-ok", sub: pct(s.inTat, s.closed) + " of closed" },
-    { label: "CP Avg TAT", value: fmt1(avg(cpClosed, r => r.rectification_time)), sub: fmt(cpClosed.length) + " closed by CP", drill: { resp: "Channelplay" } },
-    { label: "ASUS/RV Avg TAT", value: fmt1(avg(rvClosed, r => r.rectification_time)), sub: fmt(rvClosed.length) + " closed by ASUS/RV", drill: { resp: "Asus" } },
+    { label: "Closed by CP", value: fmt(cpClosed.length), sub: "Channelplay", drill: { resp: "Channelplay", final: "Closed" } },
+    { label: "Closed by ASUS/RV", value: fmt(rvClosed.length), sub: "ASUS / RV", drill: { resp: "Asus", final: "Closed" } },
     { label: "Stores w/ Tickets", value: fmt(s.stores), sub: S.storeCount ? "of " + fmt(S.storeCount) + " stores (" + pct(s.stores, S.storeCount) + ")" : "" },
   ];
   $("kpi-grid").innerHTML = kpis.map((k, i) =>
@@ -724,17 +727,72 @@ function renderLogo() {
     options: { plugins: { legend: { display: false } } } });
 
   const detail = rows.slice(0, 300);
-  S.agg.logoDetail = { headers: ["Ticket","Store","City","Status","Delivery Status","Courier","Vendor","Dispatched","Delivered"],
-    rows: detail.map(r => [r.ticket_id, r.store_name, r.city, r.final_status, r.logo_delivery_status, r.logo_courier, r.logo_vendor, r.logo_dispatch_date, r.logo_delivery_date]) };
+  const pptCell = url => url ? `<a href="${esc(url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">View ↗</a>` : "-";
+  S.agg.logoDetail = { headers: ["Ticket","Store","City","Status","Delivery Status","Courier","Vendor","Dispatched","Delivered","Issue PPT","Rectified PPT"],
+    rows: detail.map(r => [r.ticket_id, r.store_name, r.city, r.final_status, r.logo_delivery_status, r.logo_courier, r.logo_vendor, r.logo_dispatch_date, r.logo_delivery_date, r.issue_ppt_link, r.rectified_ppt_link]) };
   renderTable("tbl-logo", S.agg.logoDetail.headers, detail.map(r => ({
     cells: [esc(r.ticket_id), esc(r.store_name || "-"), esc(r.city || "-"),
       `<span class="pill ${r.final_status === "Open" ? "open" : "closed"}">${esc(r.final_status || "-")}</span>`,
       esc(r.logo_delivery_status || "-"), esc(r.logo_courier || "-"), esc(r.logo_vendor || "-"),
-      fmtDate(r.logo_dispatch_date), fmtDate(r.logo_delivery_date)],
+      fmtDate(r.logo_dispatch_date), fmtDate(r.logo_delivery_date),
+      pptCell(r.issue_ppt_link), pptCell(r.rectified_ppt_link)],
     onClick: () => openDrawer(r) })));
 
   $("logo-note").textContent = rows.length ? "" :
     "No logo cases in the current selection. Logistics fields (courier, AWB, delivery dates) arrive with daily tracker uploads.";
+}
+
+// ============================================================
+// FEATURE SUGGESTION / QUERY WALL
+// ============================================================
+async function updateSuggestBadge() {
+  if (!S.sb || typeof S.sb.from !== "function") return;
+  const { count, error } = await S.sb.from("suggestions").select("*", { count: "exact", head: true }).eq("resolved", false);
+  const b = $("suggest-badge");
+  if (error || !b) { if (b) b.classList.add("hidden"); return; }
+  b.textContent = count || 0;
+  b.classList.toggle("hidden", !count);
+}
+
+async function renderSuggest() {
+  if (!S.sb || typeof S.sb.from !== "function") return;
+  const { data, error } = await S.sb.from("suggestions").select("*")
+    .order("resolved", { ascending: true }).order("created_at", { ascending: false }).limit(300);
+  const list = $("suggest-list");
+  if (error) { list.innerHTML = `<p class="muted">Could not load the wall: ${esc(error.message)}. Has migration-links-suggestions.sql been run?</p>`; return; }
+  $("suggest-count").textContent = `${data.filter(s => !s.resolved).length} open · ${data.length} total`;
+  if (!data.length) { list.innerHTML = '<p class="muted">No suggestions or queries yet — be the first to post one.</p>'; return; }
+  const me = S.session.user.email;
+  list.innerHTML = data.map(s => {
+    const canToggle = S.role === "admin" || s.email === me;
+    const meta = `${esc(s.email)} · ${new Date(s.created_at).toLocaleString("en-IN")}` +
+      (s.resolved ? ` · <b>Resolved</b> by ${esc(s.resolved_by || "?")} on ${new Date(s.resolved_at).toLocaleDateString("en-IN")}` : "");
+    return `<div class="suggestion ${s.resolved ? "resolved" : ""}">
+      <div class="sg-body"><div class="sg-text">${esc(s.content)}</div><div class="sg-meta">${meta}</div></div>
+      <label class="sg-check" title="${canToggle ? "Mark as addressed/resolved" : "Only an admin or the author can change this"}">
+        <input type="checkbox" data-id="${s.id}" ${s.resolved ? "checked" : ""} ${canToggle ? "" : "disabled"}> resolved
+      </label></div>`;
+  }).join("");
+  list.querySelectorAll("input[type=checkbox]").forEach(cb => cb.onchange = async () => {
+    const upd = cb.checked
+      ? { resolved: true, resolved_by: me, resolved_at: new Date().toISOString() }
+      : { resolved: false, resolved_by: null, resolved_at: null };
+    const { error: uErr } = await S.sb.from("suggestions").update(upd).eq("id", Number(cb.dataset.id));
+    if (uErr) { toast("Update failed: " + uErr.message, 5000); cb.checked = !cb.checked; return; }
+    renderSuggest(); updateSuggestBadge();
+  });
+}
+
+async function postSuggestion() {
+  const txt = $("suggest-input").value.trim();
+  if (!txt) return toast("Write something first");
+  $("suggest-post").disabled = true;
+  const { error } = await S.sb.from("suggestions").insert({ email: S.session.user.email, content: txt });
+  $("suggest-post").disabled = false;
+  if (error) return toast("Post failed: " + error.message, 5000);
+  $("suggest-input").value = "";
+  toast("Posted");
+  renderSuggest(); updateSuggestBadge();
 }
 
 // ============================================================
@@ -762,17 +820,20 @@ function renderExplorer() {
     numCols: [14], onClick: () => openDrawer(t) })));
 }
 
+const linkOrText = v => /^https?:\/\//i.test(String(v)) ?
+  `<a href="${esc(v)}" target="_blank" rel="noopener">Open link ↗</a>` : esc(v);
+
 function openDrawer(t) {
   $("drawer-title").textContent = "Ticket #" + t.ticket_id;
   const skip = new Set(["extra", "updated_at"]);
   let html = "";
   for (const [k, v] of Object.entries(t)) {
     if (skip.has(k) || v == null || v === "") continue;
-    html += `<div class="field"><label>${esc(k.replace(/_/g, " "))}</label>${esc(k.endsWith("_date") ? fmtDate(v) : v)}</div>`;
+    html += `<div class="field"><label>${esc(k.replace(/_/g, " "))}</label>${k.endsWith("_date") ? esc(fmtDate(v)) : linkOrText(v)}</div>`;
   }
   if (t.extra && Object.keys(t.extra).length) {
     html += `<div class="field"><label>— additional columns —</label></div>`;
-    for (const [k, v] of Object.entries(t.extra)) html += `<div class="field"><label>${esc(k)}</label>${esc(v)}</div>`;
+    for (const [k, v] of Object.entries(t.extra)) html += `<div class="field"><label>${esc(k)}</label>${linkOrText(v)}</div>`;
   }
   $("drawer-body").innerHTML = html;
   $("drawer").classList.remove("hidden"); $("drawer-overlay").classList.remove("hidden");

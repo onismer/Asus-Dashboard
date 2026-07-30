@@ -35,6 +35,38 @@ const Upload = (() => {
     if (msg) $(msgId).textContent = msg;
   }
 
+  // ---------------- PPT hyperlink extraction ----------------
+  // Excel cells in the PPT columns show a filename but carry a real hyperlink.
+  // sheet_to_json drops hyperlinks, so we read them straight off the cells.
+  const PPT_FIELDS = { "issue ppt link": "issue_ppt_link", "rectified ppt link": "rectified_ppt_link" };
+  function fixLinkTarget(t) {
+    t = String(t || "");
+    const m = t.match(/^(?:\.\.\/)+(.*)$/);       // relative SharePoint link
+    if (m) return "https://teamchannelplay-my.sharepoint.com/" + m[1];
+    return t;
+  }
+  /** Find PPT link columns on the header row; returns { colIdx: dbField } */
+  function pptColumns(ws, headerRowIdx) {
+    const out = {};
+    if (!ws || !ws["!ref"]) return out;
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r: headerRowIdx, c })];
+      const n = normHeader(cell && cell.v);
+      if (PPT_FIELDS[n]) out[c] = PPT_FIELDS[n];
+    }
+    return out;
+  }
+  /** Attach hyperlink targets (or URL-looking text) for sheet row r onto the parsed row. */
+  function attachPptLinks(row, ws, r, cols) {
+    for (const [c, field] of Object.entries(cols)) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c: Number(c) })];
+      if (!cell) continue;
+      if (cell.l && cell.l.Target) row[field] = fixLinkTarget(cell.l.Target);
+      else if (typeof cell.v === "string" && /^https?:\/\//i.test(cell.v.trim())) row[field] = cell.v.trim();
+    }
+  }
+
   // ---------------- parse & validate ----------------
   async function handleFile(file) {
     reset();
@@ -71,16 +103,21 @@ const Upload = (() => {
 
       if (det.format === "legacy") {
         // ---- HISTORICAL FILE (imports as protected "Historical: 2025") ----
-        const raw = XLSX.utils.sheet_to_json(wb.Sheets[det.details], { defval: null, raw: true });
+        const ws = wb.Sheets[det.details];
+        const raw = XLSX.utils.sheet_to_json(ws, { defval: null, raw: true, blankrows: true });
         if (!raw.length) throw new Error("Details Sheet has no data rows.");
         const lookup = buildHeaderLookup(Object.keys(raw[0]));
         if (lookup.missing.length)
           throw new Error("Required column(s) missing in Details Sheet: " + lookup.missing.join(", "));
         if (lookup.extras.length) extrasInfo.push(`${lookup.extras.length} unmapped column(s) preserved: ${lookup.extras.slice(0, 8).join(", ")}${lookup.extras.length > 8 ? "…" : ""}`);
+        const pptCols = pptColumns(ws, 0);
         raw.forEach((r, i) => {
           if (Object.values(r).every(v => v == null || String(v).trim() === "")) return;
           const { row, warnings: w, errors: e } = parseTicketRow(r, lookup);
-          if (!e.length) { deriveFields(row, null); row.data_source = "Historical: 2025"; row.frozen = true; }
+          if (!e.length) {
+            deriveFields(row, null); row.data_source = "Historical: 2025"; row.frozen = true;
+            attachPptLinks(row, ws, i + 1, pptCols);   // blankrows:true → raw[i] is sheet row i+1
+          }
           takeRow(row, w, e, i + 2, null);
         });
         if (det.stores) storeRows = parseStoreSheet(XLSX.utils.sheet_to_json(wb.Sheets[det.stores], { header: 1, defval: null }))
@@ -88,7 +125,8 @@ const Upload = (() => {
       } else {
         // ---- DAILY TRACKER (imports as "Live") ----
         for (const sheetName of det.cases) {
-          const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: null, raw: true });
+          const ws = wb.Sheets[sheetName];
+          const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
           const hr = findHeaderRow(aoa, "ticket id");
           if (hr < 0) { warnings.push(`Sheet "${sheetName}": could not find a header row with "Ticket ID" — sheet skipped`); continue; }
           const headers = aoa[hr].map(h => h == null ? "" : String(h));
@@ -98,6 +136,7 @@ const Upload = (() => {
             continue;
           }
           const logoFlag = /^non\s*logo/i.test(sheetName.trim()) ? "Non Logo" : /^logo/i.test(sheetName.trim()) ? "Logo" : "Non Logo";
+          const pptCols = pptColumns(ws, hr);
           for (let i = hr + 1; i < aoa.length; i++) {
             const arr = aoa[i] || [];
             const obj = {};
@@ -106,7 +145,10 @@ const Upload = (() => {
             // tracker sheets carry formula-filled blank rows → skip silently when
             // there is no ticket id AND no store name
             if (row.ticket_id == null && !row.store_name) continue;
-            if (!e.length) { deriveFields(row, logoFlag); row.data_source = "Live"; row.frozen = false; }
+            if (!e.length) {
+              deriveFields(row, logoFlag); row.data_source = "Live"; row.frozen = false;
+              attachPptLinks(row, ws, i, pptCols);
+            }
             takeRow(row, w, e, i + 1, sheetName);
           }
         }
