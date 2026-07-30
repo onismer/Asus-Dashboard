@@ -85,6 +85,12 @@ async function loadData() {
     updateSuggestBadge();
     $("as-on-badge").textContent = S.asOn ? "Data as on " + fmtDate(S.asOn) : (all.length ? "" : "No data yet — use Upload tab");
     buildFilterOptions();
+    // default view = Live data (falls back to All when no live data exists yet)
+    if (!S._sourceDefaulted) {
+      S._sourceDefaulted = true;
+      const sel = $("f-source");
+      if ([...sel.options].some(o => o.value === "Live")) { sel.value = "Live"; F.source = "Live"; renderChips(); }
+    }
     S.dirty = true; renderActive();
     Upload.loadHistory();
   } catch (e) {

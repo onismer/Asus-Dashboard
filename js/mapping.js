@@ -271,6 +271,8 @@ function parseTicketRow(raw, headerLookup) {
   // from closure-date charts with a footnote. No warning raised.
   if (row.rectification_date && row.issue_raised_date && row.rectification_date < row.issue_raised_date)
     warnings.push("Rectification Date earlier than Issue Raised Date");
+  if (row.approval_date && row.issue_raised_date && row.approval_date < row.issue_raised_date)
+    warnings.push("Approval Date earlier than Issue Raised Date");
 
   // derive year if absent
   if (row.issue_raised_year == null && row.issue_raised_date)
@@ -323,6 +325,24 @@ function findHeaderRow(aoa, mustContain) {
 /** Derive dashboard fields the tracker file doesn't carry (quarters, years,
     half-year, closure ageing bucket, logo flag). Safe to call on any row. */
 function deriveFields(row, logoFlag) {
+  // ---- sanitize TAT numbers ----
+  // The source sheets compute these with formulas (rect date − issue date);
+  // when a date is blank the formula returns a raw date serial (±45,000+),
+  // which wrecks every average. Recompute from real dates when possible,
+  // and null out anything implausible.
+  const dayDiff = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
+  // business definition (matches the workbook formulas): resolution TAT =
+  // rectification date − approval date (fallback: − issue raised date)
+  const tatBase = row.approval_date || row.issue_raised_date;
+  if (tatBase && row.rectification_date)
+    row.rectification_time = dayDiff(tatBase, row.rectification_date);
+  if (row.rectification_time != null && (row.rectification_time < 0 || row.rectification_time > 1500))
+    row.rectification_time = null;
+  if (row.issue_raised_date && row.approval_date)
+    row.approval_days = dayDiff(row.issue_raised_date, row.approval_date);
+  if (row.approval_days != null && (row.approval_days < 0 || row.approval_days > 1500))
+    row.approval_days = null;
+
   const q = d => d ? "Q" + (Math.floor((Number(d.slice(5, 7)) - 1) / 3) + 1) + " " + d.slice(0, 4) : null;
   if (row.issue_raised_year == null && row.issue_raised_date) row.issue_raised_year = Number(row.issue_raised_date.slice(0, 4));
   if (!row.quarter_raised    && row.issue_raised_date)  row.quarter_raised    = q(row.issue_raised_date);
