@@ -369,8 +369,12 @@ function renderOverview() {
     `<div class="kpi ${k.cls || ""}" data-i="${i}"><div class="kpi-label">${k.label}</div><div class="kpi-value">${k.value}</div><div class="kpi-sub">${k.sub || ""}</div></div>`).join("");
   $("kpi-grid").querySelectorAll(".kpi").forEach((el, i) => { if (kpis[i].drill) el.onclick = () => drill(kpis[i].drill, kpis[i].label); });
 
-  // quarterly chart
-  const quarters = [...new Set(rows.map(r => r.quarter_raised).filter(Boolean))].sort((a, b) => qKey(a) - qKey(b));
+  // quarterly chart — quarters where tickets were raised OR closed (so closures
+  // landing in a later quarter than any raise are not dropped)
+  const quarters = [...new Set([
+    ...rows.map(r => r.quarter_raised),
+    ...rows.filter(r => r.final_status === "Closed").map(r => r.quarter_rectified),
+  ].filter(Boolean))].sort((a, b) => qKey(a) - qKey(b));
   const recvByQ = quarters.map(q => rows.filter(r => r.quarter_raised === q).length);
   const closByQ = quarters.map(q => rows.filter(r => r.quarter_rectified === q && r.final_status === "Closed").length);
   const openByQ = quarters.map(q => rows.filter(r => r.quarter_raised === q && r.final_status === "Open").length);
