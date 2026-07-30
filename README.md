@@ -51,6 +51,15 @@ Two upload formats, auto-detected:
 
 A **Data Source** filter (All / Historical: 2025 / Live) applies across every view and export. Run `supabase/migration-historical-2025.sql` once before first use — it clears old data, adds the freeze protection, and locks anonymous access.
 
+## Removing an incorrect upload
+Every upload stores before-images of the rows it touches (run
+`supabase/migration-upload-rollback.sql` once to enable). Admins see a
+**Remove** button in Upload Data → Upload History: inserted tickets are
+deleted and overwritten tickets restored to their exact previous values.
+If later uploads exist you're asked whether to clear those too (recommended).
+Removed uploads stay in the history marked "Removed by". Historical uploads
+and pre-feature uploads cannot be removed.
+
 ## Daily workflow
 Upload the latest tracker file. The parser:
 
